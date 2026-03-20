@@ -2,10 +2,10 @@ import torch
 from timm.layers import trunc_normal_
 import torch.nn as nn
 from timm.models.layers import DropPath
-from typing import Callable, List, Optional
 from thop import profile
 import pywt
 import torch.nn.functional as F
+
 
 def create_2d_wavelet_filter(wave, in_size, out_size, type=torch.float):
     w = pywt.Wavelet(wave)
@@ -58,7 +58,7 @@ class WTConv2d(nn.Module):
         self.dilation = 1
 
         self.wt_filter, self.iwt_filter = create_2d_wavelet_filter(wt_type, in_channels, in_channels,
-                                                                           torch.float)
+                                                                   torch.float)
         self.wt_filter = nn.Parameter(self.wt_filter, requires_grad=False)
         self.iwt_filter = nn.Parameter(self.iwt_filter, requires_grad=False)
 
@@ -132,7 +132,7 @@ class WTConv2d(nn.Module):
 
 
 class _ScaleModule(nn.Module):
-    def __init__(self, dims, init_scale=1.0, init_bias=0):
+    def __init__(self, dims, init_scale=1.0):
         super(_ScaleModule, self).__init__()
         self.dims = dims
         self.weight = nn.Parameter(torch.ones(*dims) * init_scale)
@@ -140,6 +140,7 @@ class _ScaleModule(nn.Module):
 
     def forward(self, x):
         return torch.mul(self.weight, x)
+
 
 class ConvBN(torch.nn.Sequential):
     def __init__(self, in_planes, out_planes, kernel_size=1, stride=1, padding=0, dilation=1, groups=1, with_bn=True):
@@ -150,16 +151,9 @@ class ConvBN(torch.nn.Sequential):
             torch.nn.init.constant_(self.bn.weight, 1)
             torch.nn.init.constant_(self.bn.bias, 0)
 
-class MultiScaleConv(nn.Module):
-    """多尺度卷积模块（支持n个尺度）"""
 
+class MultiScaleConv(nn.Module):
     def __init__(self, in_channels, n=2, activation=nn.ReLU6(inplace=True)):
-        """
-        参数:
-            in_channels: 输入通道数
-            n: 卷积尺度数量，卷积核尺寸将为3, 5, 7, ..., 2*n+1
-            activation: 激活函数
-        """
         super().__init__()
         self.n = n
         self.in_channels = in_channels
@@ -190,16 +184,7 @@ class MultiScaleConv(nn.Module):
                 activation
             )
             self.branches.append(branch)
-
-        # 修复融合层：输入通道数应该是总通道数in_channels，而不是单个分支的channels
-        # Squeeze-and-Excitation模块用于通道注意力[7,8](@ref)
-        # self.expand = nn.Sequential(
-        #     nn.Conv2d(in_channels,in_channels,1,1),
-        #     nn.BatchNorm2d(in_channels),
-        #     activation
-        # )
         self.fusion = nn.Sequential(
-            # EcaModule(channels=channels,rd_ratio=0.25),  # 使用总通道数
             nn.Conv2d(in_channels, in_channels, 1, 1),  # 1x1卷积进行特征融合
             nn.BatchNorm2d(in_channels),
             activation
@@ -233,17 +218,19 @@ class MultiScaleConv(nn.Module):
 class FFN(nn.Module):
     def __init__(self, dim):
         super().__init__()
-        self.dwconv = ConvBN(dim,dim,7,1,3,1,dim,True)
+        self.dwconv = ConvBN(dim, dim, 7, 1, 3, 1, dim, True)
         self.ffn = nn.Sequential(
-            ConvBN(dim,dim,1,1,0,1,1,True),
+            ConvBN(dim, dim, 1, 1, 0, 1, 1, True),
             nn.ReLU6(),
-            ConvBN(dim,dim,1,1,0,1,1,True)
+            ConvBN(dim, dim, 1, 1, 0, 1, 1, True)
         )
-    def forward(self,x):
+
+    def forward(self, x):
         Identity = x
         x = self.ffn(x)
         x = Identity + x
         return x
+
 
 class Block(nn.Module):
     def __init__(self, dim, levels, mlp_ratio=3, drop_path=0., ratios=(0.6, 0.3, 0.1)):
@@ -284,9 +271,7 @@ class Block(nn.Module):
         self.ffn = FFN(dim)
 
         self.act = nn.ReLU6()
-        # self.ffn_conv = FFN_CONV(dim)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-
 
     def forward(self, z):
         # z = self.ffn_conv(z)
@@ -310,27 +295,23 @@ class Block(nn.Module):
         if self.has_branch2:
             y2_processed = self.MKC(y2)
             outputs.append(y2_processed)
-
         # 分支3处理：身份映射（直接使用y3）
         if self.has_branch3:
             outputs.append(y3)
-
         # 合并三个分支的结果
         output = torch.cat(outputs, dim=1) if len(outputs) > 1 else outputs[0]
         output = self.ffn(output)
         return output
 
 
-class RSCNet(nn.Module):
-    def __init__(self, mlp_ratio,base_dim=32, depths=[1, 3, 6, 3],
+class RSPNet(nn.Module):
+    def __init__(self, mlp_ratio, base_dim=32, depths=[1, 3, 6, 3],
                  drop_path_rate=0.0, num_classes=27, wt_levels=[1, 1, 1, 1],
-                 branch_ratios=None,  ** kwargs):
+                 branch_ratios=None, **kwargs):
         super().__init__()
         self.num_classes = num_classes
         self.in_channel = 32
 
-
-        # 添加WTConv级别配置
         self.wt_levels = wt_levels
         if len(self.wt_levels) != len(depths):
             raise ValueError("wt_levels的长度必须与depths相同")
@@ -359,7 +340,7 @@ class RSCNet(nn.Module):
         self.stages = nn.ModuleList()
         cur = 0
         for i_layer in range(len(depths)):
-            embed_dim = base_dim * 2  **  i_layer
+            embed_dim = base_dim * 2 ** i_layer
 
             # 下采样层
             down_sampler = ConvBN(self.in_channel, embed_dim, 3, 2, 1)
@@ -379,7 +360,6 @@ class RSCNet(nn.Module):
                 ) for i in range(depths[i_layer])
             ]
             cur += depths[i_layer]
-
             self.stages.append(nn.Sequential(down_sampler, *blocks))
 
         # head
@@ -409,152 +389,51 @@ class RSCNet(nn.Module):
         return x
 
 
-# 不同配置的StarNet模型定义
-def RSCNet_S(pretrained=False, branch_ratios=None,  ** kwargs):
-    """
-    创建StarNet-S1模型，集成了WTConv2d模块
-    """
+def RSPNet_S(branch_ratios=None, **kwargs):
     if branch_ratios is None:
-        branch_ratios =  [
-            (0.5, 0.5, 0.),  # 只使用分支2
-            (0.5, 0.5, 0.),  # 混合分支
-            (0.5, 0.4, 0.1),  # 只使用分支1
-            (0.5, 0.4, 0.1)  # 混合分支
-        ]  # 4个stage使用相同比例
+        branch_ratios = [(0.5, 0.5, 0.), (0.5, 0.5, 0.),
+                         (0.5, 0.4, 0.1), (0.5, 0.4, 0.1)]
 
-    model = RSCNet(
-        mlp_ratio=2,
-        base_dim=32,
-        depths=[1, 2, 6, 2],
-        num_classes=27,
-        wt_levels=[2, 1, 1, 1],
-        branch_ratios=branch_ratios,  # 可配置的分支比例
-     ** kwargs
+    model = RSPNet(
+        mlp_ratio=2, base_dim=32, depths=[1, 2, 6, 2], num_classes=27,
+        wt_levels=[2, 1, 1, 1], branch_ratios=branch_ratios,
+        **kwargs
     )
-
-    if pretrained:
-        print("预训练权重加载功能需要配置相应的URL")
-
     return model
 
 
-def RSCNet_M(pretrained=False, branch_ratios=None,  ** kwargs):
-    """
-    创建StarNet-S2模型
-    """
+def RSPNet_M(branch_ratios=None, **kwargs):
     if branch_ratios is None:
-        branch_ratios = [
-            (0.5, 0.5, 0.),  # 只使用分支2
-            (0.5, 0.5, 0.),  # 混合分支
-            (0.5, 0.4, 0.1),  # 只使用分支1
-            (0.5, 0.4, 0.1)  # 混合分支
-        ]  # 4个stage使用相同比例
+        branch_ratios = [(0.5, 0.5, 0.), (0.5, 0.5, 0.),
+                         (0.5, 0.4, 0.1), (0.5, 0.4, 0.1)]
 
-    model = RSCNet(
-        mlp_ratio=2,
-        base_dim=40,
-        depths=[1, 2, 6, 2],
-        num_classes=27,
-        wt_levels=[3, 2, 1, 1],
-        branch_ratios=branch_ratios,
-     ** kwargs
-    )
-
-    if pretrained:
-        print("预训练权重加载功能需要配置相应的URL")
-
+    model = RSPNet(
+        mlp_ratio=2, base_dim=40, depths=[1, 2, 6, 2], num_classes=27,
+        wt_levels=[3, 2, 1, 1], branch_ratios=branch_ratios,
+        **kwargs)
     return model
 
 
-def RSCNet_L(pretrained=False, branch_ratios=None,  ** kwargs):
-    """
-    创建StarNet-S3模型
-    """
+def RSPNet_L(branch_ratios=None, **kwargs):
     if branch_ratios is None:
-        branch_ratios = [
-            (0.5, 0.5, 0.),  # 只使用分支2
-            (0.5, 0.5, 0.),  # 混合分支
-            (0.5, 0.4, 0.1),  # 只使用分支1
-            (0.5, 0.4, 0.1)  # 混合分支
-        ]  # 4个stage使用相同比例
+        branch_ratios = [(0.5, 0.5, 0.), (0.5, 0.5, 0.),
+                         (0.5, 0.4, 0.1), (0.5, 0.4, 0.1)]
 
-    model = RSCNet(
-        mlp_ratio=2,
-        base_dim=48,
-        depths=[1, 3, 6, 3],
-        num_classes=27,
-        wt_levels=[3, 2, 1, 1],
-        branch_ratios=branch_ratios,
-     ** kwargs
-    )
-
-    if pretrained:
-        print("预训练权重加载功能需要配置相应的URL")
-
+    model = RSPNet(
+        mlp_ratio=2, base_dim=48, depths=[1, 3, 6, 3], num_classes=27,
+        wt_levels=[3, 2, 1, 1], branch_ratios=branch_ratios,
+        **kwargs)
     return model
-
-
-def RSCNet_TEST(pretrained=False, branch_ratios=None,  ** kwargs):
-    """
-    创建StarNet-S4模型
-    """
-    if branch_ratios is None:
-        branch_ratios = [
-            (0.5, 0.5, 0.),  # 只使用分支2
-            (0.5, 0.5, 0.),  # 混合分支
-            (0.5, 0.4, 0.1),  # 只使用分支1
-            (0.5, 0.4, 0.1)  # 混合分支
-        ]  # 4个stage使用相同比例
-
-    model = RSCNet(
-        mlp_ratio=2,
-        base_dim=40,
-        depths=[1,2, 6, 2],
-        num_classes=27,
-        wt_levels=[3, 2, 1, 1],
-        branch_ratios=branch_ratios,
-     ** kwargs
-    )
-    if pretrained:
-        print("预训练权重加载功能需要配置相应的URL")
-
-    return model
-
 
 # 使用示例
 if __name__ == "__main__":
-    # 示例1：创建模型实例，所有stage使用相同的分支比例
-    model1 = RSCNet_M(pretrained=False, branch_ratios=
-    [
-            (0.5, 0.5, 0.),  # 只使用分支2
-            (0.5, 0.5, 0.),  # 混合分支
-            (0.5, 0.4, 0.1),  # 只使用分支1
-            (0.5, 0.4, 0.1)  # 混合分支
-        ]  # 4个stage使用相同比例
-    #  [
-    #      (0.5, 0.5, 0.),  # 只使用分支2
-    #      (0.8, 0.1, 0.1),  # 混合分支
-    #      (0.1, 0.8, 0.1),  # 只使用分支1
-    #      (0.4, 0.4, 0.2)  # 混合分支
-    #  ]
-                        ) # 4个stage使用相同比例])
-
-    # 将模型设置为评估模式
-    model1.eval()
+    model = RSPNet_M()
 
     print("模型结构:")
-    print(model1)
-
-    # 测试前向传播
+    print(model)
     input_tensor = torch.randn(1, 3, 224, 224)
-
-    # 计算参数量
-    # total_params = sum(p.numel() for p in model1.parameters())
-    # print(f"\n模型参数量: {total_params / 1e6:.2f}M")
-
-    # 计算FLOPs - 方法1: 使用thop
     try:
-        flops, params = profile(model1, inputs=(input_tensor,))
+        flops, params = profile(model, inputs=(input_tensor,))
         print(f"FLOPs: {flops / 1e6:.2f}M")
         print(f"Params: {params / 1e6:.2f}M")
     except Exception as e:
