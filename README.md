@@ -51,7 +51,7 @@ Evaluated on two different segmentation frameworks.
 | :--- | :---: | :---: | :---: |
 | RSPNet-L | 4.55 | 28.94 | 89.13 |
 
-### Prepare RSCD(https://thu-rsxd.com/rscd/) Dataset
+### Prepare [RSPNet-L](https://thu-rsxd.com/rscd/) Dataset
 
 ```text
 DATA_SET/
