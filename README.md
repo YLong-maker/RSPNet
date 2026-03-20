@@ -31,25 +31,22 @@ Accurate and real-time road surface condition perception is crucial for the plan
 ### Downstream Tasks Results
 
 #### 1. Road Surface Reconstruction on RSRD Dataset
-[cite_start]Based on the RoadBEV-mono framework[cite: 216].
+Based on the RoadBEV-mono framework.
 
 | Backbone | Params (M) | Abs.err (cm) ↓ | RMSE (cm) ↓ | >0.5cm (%) ↓ |
 | :--- | :---: | :---: | :---: | :---: |
 | RSPNet-M | 26.3 | 1.774 | 2.019 | 76.03 |
 
-[cite_start]*(Note: Lower values indicate better performance for these metrics [cite: 318, 381-383].)*
-
----
 
 #### 2. Road Surface Segmentation on IDD Dataset
-[cite_start]Evaluated on two different segmentation frameworks[cite: 419, 421].
+Evaluated on two different segmentation frameworks.
 
-[cite_start]**Framework: U-Net** [cite: 422]
+**Framework: U-Net** 
 | Backbone | Params (M) | GFLOPs | mIOU (%) ↑ |
 | :--- | :---: | :---: | :---: |
 | RSPNet-L | 6.52 | 84.17 | 87.57 |
 
-[cite_start]**Framework: Semantic FPN** [cite: 423]
+**Framework: Semantic FPN**
 | Backbone | Params (M) | GFLOPs | mIOU (%) ↑ |
 | :--- | :---: | :---: | :---: |
 | RSPNet-L | 4.55 | 28.94 | 89.13 |
