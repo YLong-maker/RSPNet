@@ -15,7 +15,7 @@ import csv
 from datetime import datetime
 import pandas as pd
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*timm.models.layers.*")
-from my_model.RSPNet import RSPNet_M
+from Classification.RSPNet import RSPNet_M
 def parse_args():
     parser = argparse.ArgumentParser(description='StarNet Training Script')
 
