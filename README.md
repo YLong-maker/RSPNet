@@ -28,6 +28,32 @@ Accurate and real-time road surface condition perception is crucial for the plan
 | [RSPNet-M](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 2.17M | 359.3M | 224 x 224 | 91.61 | [model](你的权重链接) \| [log](你的训练日志链接) |
 | [RSPNet-L](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 3.69M | 554.9M | 224 x 224 | 92.03 | [model](你的权重链接) \| [log](你的训练日志链接) |
 
+### Downstream Tasks Results
+
+#### 1. Road Surface Reconstruction on RSRD Dataset
+[cite_start]Based on the RoadBEV-mono framework[cite: 216].
+
+| Backbone | Params (M) | Abs.err (cm) ↓ | RMSE (cm) ↓ | >0.5cm (%) ↓ |
+| :--- | :---: | :---: | :---: | :---: |
+| RSPNet-M | 26.3 | 1.774 | 2.019 | 76.03 |
+
+[cite_start]*(Note: Lower values indicate better performance for these metrics [cite: 318, 381-383].)*
+
+---
+
+#### 2. Road Surface Segmentation on IDD Dataset
+[cite_start]Evaluated on two different segmentation frameworks[cite: 419, 421].
+
+[cite_start]**Framework: U-Net** [cite: 422]
+| Backbone | Params (M) | GFLOPs | mIOU (%) ↑ |
+| :--- | :---: | :---: | :---: |
+| RSPNet-L | 6.52 | 84.17 | 87.57 |
+
+[cite_start]**Framework: Semantic FPN** [cite: 423]
+| Backbone | Params (M) | GFLOPs | mIOU (%) ↑ |
+| :--- | :---: | :---: | :---: |
+| RSPNet-L | 4.55 | 28.94 | 89.13 |
+
 ### Prepare Dataset
 
 Download and extract your dataset to construct the following directory structure:
