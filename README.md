@@ -5,7 +5,7 @@ Accurate and real-time road surface condition perception is crucial for the plan
 
 ### Network framework
 <div align="center">
-    <img src="https://github.com/user-attachments/assets/7ccdd326-3e76-4df8-a06d-b057144acf41" alt="image" width="502" height="389" />
+    <img src="https://github.com/user-attachments/assets/7ccdd326-3e76-4df8-a06d-b057144acf41" alt="image" width="1004" height="778" />
 </div>
 
 ### Full Work Summary
@@ -21,7 +21,7 @@ Accurate and real-time road surface condition perception is crucial for the plan
 
 ## Main results
 
-#### 1.Road Surface Classification on [RSCD](https://thu-rsxd.com/rscd/)
+#### 1.Road Surface Classification on [RSCD](https://thu-rsxd.com/rscd/) Dataset
 
 | Model | #Params | FLOPs | Resolution | Top-1 (%) | Weights & Logs |
 | :--- | :---: | :---: | :---: | :---: | :---: |
