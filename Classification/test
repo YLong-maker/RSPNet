@@ -1,0 +1,472 @@
+import argparse
+import torch
+from torch.utils.data import DataLoader
+from torchvision import transforms, datasets
+import os
+import numpy as np
+import seaborn as sns
+import pandas as pd
+from sklearn.manifold import TSNE
+from sklearn.metrics import confusion_matrix, classification_report, f1_score, recall_score
+from tqdm import tqdm
+import datetime
+import time
+import matplotlib
+matplotlib.use('Agg')  
+import matplotlib.pyplot as plt
+from Classification.RSPNet import RSPNet_M
+def create_results_directory(base_path="test_checkpoints"):
+    """
+    创建带有时间戳的结果目录
+    """
+    # 生成时间戳
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    # 创建目录名称
+    dir_name = f"test_data_{timestamp}"
+    # 完整路径
+    full_path = os.path.join(base_path, dir_name)
+
+    # 创建目录
+    os.makedirs(full_path, exist_ok=True)
+
+    print(f"结果将保存到: {full_path}")
+    return full_path
+
+
+def extract_features(model, test_loader, device):
+    """
+    提取模型特征
+    """
+    model.eval()
+    features = []
+    labels_list = []
+
+    # 使用tqdm创建进度条
+    pbar = tqdm(test_loader, desc="提取特征", ncols=100)
+
+    with torch.no_grad():
+        for batch_idx, (images, labels) in enumerate(pbar):
+            images = images.to(device)
+            # 获取模型输出（特征）
+            outputs = model(images)
+
+            # 将特征和标签转换为numpy数组
+            features.append(outputs.cpu().numpy())
+            labels_list.append(labels.numpy())
+
+            # 更新进度条
+            pbar.set_postfix({
+                'Batch': f'{batch_idx + 1}/{len(test_loader)}'
+            })
+
+    # 合并所有批次的特征和标签
+    features = np.vstack(features)
+    labels_list = np.hstack(labels_list)
+
+    return features, labels_list
+
+
+def test_model(model, test_loader, device):
+    """
+    测试模型并计算top1和top5准确率，同时收集预测结果用于混淆矩阵
+    """
+    model.eval()
+    top1_correct = 0
+    top5_correct = 0
+    total = 0
+
+    # 用于混淆矩阵的变量
+    all_predictions = []
+    all_labels = []
+
+    # 使用tqdm创建进度条
+    pbar = tqdm(test_loader, desc="测试进度", ncols=100)
+
+    with torch.no_grad():
+        for batch_idx, (images, labels) in enumerate(pbar):
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+
+            # 计算top1准确率
+            _, predicted = torch.max(outputs.data, 1)
+            top1_correct += (predicted == labels).sum().item()
+
+            # 计算top5准确率
+            _, top5_pred = outputs.topk(5, 1, True, True)
+            top5_correct += top5_pred.eq(labels.view(-1, 1).expand_as(top5_pred)).sum().item()
+
+            total += labels.size(0)
+
+            # 收集预测和标签用于混淆矩阵
+            all_predictions.extend(predicted.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+            # 实时更新进度条描述
+            current_top1 = 100 * top1_correct / total
+            current_top5 = 100 * top5_correct / total
+            pbar.set_postfix({
+                'Top1': f'{current_top1:.2f}%',
+                'Top5': f'{current_top5:.2f}%',
+                'Batch': f'{batch_idx + 1}/{len(test_loader)}'
+            })
+
+    top1_acc = 100 * top1_correct / total
+    top5_acc = 100 * top5_correct / total
+
+    return top1_acc, top5_acc, all_predictions, all_labels
+
+
+def test_throughput(model, test_loader, device, num_warmup=10, num_test=100):
+    """
+    测试模型吞吐量
+    """
+    print(f"测试模型吞吐量: {num_warmup}次预热, {num_test}次测试")
+
+    # 预热
+    model.eval()
+    print("预热中...")
+    with torch.no_grad():
+        for i, (images, _) in enumerate(test_loader):
+            if i >= num_warmup:
+                break
+            images = images.to(device)
+            _ = model(images)
+
+    # 测试吞吐量
+    print("测试吞吐量...")
+    total_time = 0
+    total_samples = 0
+
+    with torch.no_grad():
+        for i, (images, _) in enumerate(test_loader):
+            if i >= num_test:
+                break
+
+            images = images.to(device)
+            batch_size = images.size(0)
+
+            # GPU同步
+            if device.type == 'cuda':
+                torch.cuda.synchronize()
+
+            # 计时开始
+            start_time = time.time()
+
+            # 前向传播
+            _ = model(images)
+
+            # GPU同步
+            if device.type == 'cuda':
+                torch.cuda.synchronize()
+
+            # 计时结束
+            end_time = time.time()
+
+            # 累计时间和样本数
+            total_time += (end_time - start_time)
+            total_samples += batch_size
+
+    # 计算吞吐量
+    throughput = total_samples / total_time  # 样本/秒
+    fps_per_sample = total_time / total_samples * 1000  # 毫秒/样本
+
+    print(f"吞吐量测试完成:")
+    print(f"  总样本数: {total_samples}")
+    print(f"  总时间: {total_time:.4f}秒")
+    print(f"  吞吐量: {throughput:.2f} 样本/秒")
+    print(f"  处理速度: {fps_per_sample:.4f} 毫秒/样本")
+
+    return throughput, fps_per_sample
+
+
+def generate_tsne_plot(features, labels, class_names, save_path='tsne_visualization.png'):
+    """
+    生成t-SNE可视化图
+    """
+    print("开始t-SNE降维...")
+
+    # 使用t-SNE降维到2维
+    tsne = TSNE(n_components=2, random_state=42, perplexity=30, n_iter=1000)
+    features_2d = tsne.fit_transform(features)
+
+    print("t-SNE降维完成，开始绘图...")
+
+    # 创建图形
+    plt.figure(figsize=(12, 10))
+
+    # 获取唯一的类别
+    unique_labels = np.unique(labels)
+
+    # 为每个类别选择一种颜色
+    colors = plt.cm.get_cmap('tab20', len(unique_labels))
+
+    # 绘制每个类别的点
+    for i, label in enumerate(unique_labels):
+        # 选择当前类别的点
+        indices = labels == label
+        plt.scatter(features_2d[indices, 0], features_2d[indices, 1],
+                    c=[colors(i)], label=class_names[label], alpha=0.7, s=10)
+
+    plt.title('t-SNE Visualization of Feature Space')
+    plt.xlabel('t-SNE Component 1')
+    plt.ylabel('t-SNE Component 2')
+
+    # 添加图例，如果类别太多可以放在图外
+    if len(unique_labels) <= 27:
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    else:
+        print("类别过多，图例已省略")
+
+    plt.tight_layout()
+
+    # 保存图像
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"t-SNE可视化图已保存到: {save_path}")
+
+    # 显示图像
+    plt.show()
+
+
+def plot_confusion_matrix(all_labels, all_predictions, class_names, save_path='confusion_matrix.png'):
+    """
+    绘制混淆矩阵
+    """
+    print("开始计算混淆矩阵...")
+
+    # 计算混淆矩阵
+    cm = confusion_matrix(all_labels, all_predictions)
+
+    # 创建图形
+    plt.figure(figsize=(12, 10))
+
+    # 使用seaborn绘制热力图
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=class_names,
+                yticklabels=class_names)
+
+    plt.title('Confusion Matrix')
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
+
+    # 如果类别太多，调整字体大小
+    if len(class_names) > 20:
+        plt.xticks(rotation=90, fontsize=8)
+        plt.yticks(rotation=0, fontsize=8)
+    else:
+        plt.xticks(rotation=45, ha='right')
+        plt.yticks(rotation=0)
+
+    plt.tight_layout()
+
+    # 保存图像
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"混淆矩阵已保存到: {save_path}")
+
+    # 显示图像
+    plt.show()
+
+
+def save_classification_report_to_excel(all_labels, all_predictions, class_names,
+                                        save_path='classification_report.xlsx'):
+    """
+    生成分类报告并保存为Excel文件
+    """
+    print("生成分类报告...")
+
+    # 生成分类报告，保留四位小数
+    report_dict = classification_report(
+        all_labels,
+        all_predictions,
+        target_names=class_names,
+        output_dict=True,
+        digits=4  # 保留四位小数
+    )
+
+    # 计算宏观平均F1分数
+    macro_f1 = f1_score(all_labels, all_predictions, average='macro')
+    # 计算宏观平均召回率(mRecall)
+    macro_recall = recall_score(all_labels, all_predictions, average='macro')
+
+    # 转换为DataFrame
+    report_df = pd.DataFrame(report_dict).transpose()
+
+    # 添加额外的指标行
+    extra_metrics = {
+        'macro_f1': [macro_f1, np.nan, np.nan, np.nan],
+        'macro_recall': [macro_recall, np.nan, np.nan, np.nan]
+    }
+
+    # 将额外指标转换为DataFrame
+    extra_df = pd.DataFrame(extra_metrics).T
+    extra_df.columns = ['Precision', 'Recall', 'F1-Score', 'Support']
+
+    # 合并到主报告
+    report_df = pd.concat([report_df, extra_df])
+
+    # 保存到Excel文件
+    report_df.to_excel(save_path)
+    print(f"分类报告已保存到: {save_path}")
+
+    # 在控制台打印分类报告
+    print("\n分类报告 (保留四位小数):")
+    print(classification_report(all_labels, all_predictions, target_names=class_names, digits=4))
+
+    return macro_f1, macro_recall
+
+
+def save_test_summary(result_dir, top1_acc, top5_acc, throughput, fps_per_sample, test_samples, model_name,
+                      dataset_name, macro_f1, macro_recall):
+    """
+    保存测试摘要到文本文件，添加F1和mRecall
+    """
+    summary_path = os.path.join(result_dir, "test_summary.txt")
+
+    with open(summary_path, 'w') as f:
+        f.write("模型测试结果摘要\n")
+        f.write("=" * 50 + "\n")
+        f.write(f"测试时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"模型名称: {model_name}\n")
+        f.write(f"数据集: {dataset_name}\n")
+        f.write(f"测试样本数: {test_samples}\n")
+        f.write(f"Top-1 准确率: {top1_acc:.4f}%\n")
+        f.write(f"Top-5 准确率: {top5_acc:.4f}%\n")
+        f.write(f"吞吐量: {throughput:.2f} 样本/秒\n")
+        f.write(f"处理速度: {fps_per_sample:.4f} 毫秒/样本\n")
+        f.write(f"宏观平均F1分数 (macro F1): {macro_f1:.4f}\n")
+        f.write(f"宏观平均召回率 (macro Recall): {macro_recall:.4f}\n")
+        f.write(f"结果保存路径: {result_dir}\n")
+
+    print(f"测试摘要已保存到: {summary_path}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description='测试分类模型准确率')
+    parser.add_argument('--val_path', type=str, default='full_dataset/RSCD dataset-1million/test_50k', help='验证集路径')
+    parser.add_argument('--model_weights', type=str,
+                        default='training_logs/RSCD_E/RSPNet_M/model_val_acc_89.49_epoch_94_.pth',
+                        help='模型权重文件路径')
+    parser.add_argument('--batch_size', type=int, default=128, help='批次大小 (默认: 128)')
+    parser.add_argument('--num_workers', type=int, default=4, help='数据加载线程数 (默认: 4)')
+    parser.add_argument('--img_size', type=int, default=224, help='输入图像尺寸 (默认: 224)')
+    parser.add_argument('--num_classes', type=int, default=27, help='分类类别数')
+    parser.add_argument('--tsne_samples', type=int, default=10000, help='t-SNE使用的样本数量 (默认: 10000)')
+    parser.add_argument('--throughput_warmup', type=int, default=10, help='吞吐量测试预热次数 (默认: 10)')
+    parser.add_argument('--throughput_test', type=int, default=500, help='吞吐量测试次数 (默认: 500)')
+    parser.add_argument('--results_base_dir', type=str, default='test_checkpoints',
+                        help='测试结果保存的基础路径 (默认: test_checkpoints)')
+    parser.add_argument('--model_name', type=str, default='0.8_0.7_0.6_0.5',
+                        help='模型名称，用于保存结果 (默认: StarNet_S1)')
+    parser.add_argument('--dataset_name', type=str, default='CustomDataset',
+                        help='数据集名称，用于保存结果 (默认: CustomDataset)')
+
+    args = parser.parse_args()
+
+    # 检查路径是否存在
+    if not os.path.exists(args.val_path):
+        raise ValueError(f"验证集路径不存在: {args.val_path}")
+    if not os.path.exists(args.model_weights):
+        raise ValueError(f"模型权重文件不存在: {args.model_weights}")
+
+    # 创建结果目录
+    result_dir = create_results_directory(args.results_base_dir)
+
+    # 设备设置
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'使用设备: {device}')
+
+    # 数据预处理 - 使用标准的ImageNet归一化
+    transform = transforms.Compose([
+        transforms.Resize((args.img_size, args.img_size)),
+        transforms.ToTensor(),
+        # ImageNet标准归一化参数
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225])
+    ])
+
+    # 加载验证集
+    val_dataset = datasets.ImageFolder(root=args.val_path, transform=transform)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size,
+                            shuffle=False, num_workers=args.num_workers)
+
+    print(f'验证集大小: {len(val_dataset)}')
+    print(f'类别数: {len(val_dataset.classes)}')
+    print(f'批次数量: {len(val_loader)}')
+
+    # 加载模型
+    model = RSPNet_M()
+
+    # 请替换为你的模型初始化
+    # model.load_state_dict(torch.load(args.model_weights, map_location=device))
+    checkpoint = torch.load(args.model_weights, map_location=device)
+    if 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'])
+        print(f"Loaded model from checkpoint, best accuracy: {checkpoint.get('best_accuracy', 'N/A')}")
+    else:
+        # 如果文件直接是state_dict而不是checkpoint
+        model.load_state_dict(checkpoint)
+    model.to(device)
+
+    print(f'模型加载成功: {args.model_weights}')
+
+    # 测试吞吐量
+    print('\n开始测试吞吐量...')
+    throughput, fps_per_sample = test_throughput(
+        model, val_loader, device,
+        num_warmup=args.throughput_warmup,
+        num_test=args.throughput_test
+    )
+
+    # 测试模型准确率并收集预测结果
+    print('\n开始测试准确率...')
+    top1_acc, top5_acc, all_predictions, all_labels = test_model(model, val_loader, device)
+
+    # 计算宏观平均F1和宏观平均召回率
+    macro_f1 = f1_score(all_labels, all_predictions, average='macro')
+    macro_recall = recall_score(all_labels, all_predictions, average='macro')
+
+    print('\n' + '=' * 50)
+    print(f'测试结果:')
+    print(f'Top-1 准确率: {top1_acc:.4f}%')
+    print(f'Top-5 准确率: {top5_acc:.4f}%')
+    print(f'宏观平均F1分数 (macro F1): {macro_f1:.4f}')
+    print(f'宏观平均召回率 (macro Recall): {macro_recall:.4f}')
+    print(f'吞吐量: {throughput:.2f} 样本/秒')
+    print(f'处理速度: {fps_per_sample:.4f} 毫秒/样本')
+    print(f'测试样本数: {len(val_dataset)}')
+    print('=' * 50)
+
+    # 定义结果文件路径
+    tsne_path = os.path.join(result_dir, "tsne_visualization.png")
+    confusion_matrix_path = os.path.join(result_dir, "confusion_matrix.png")
+    report_excel_path = os.path.join(result_dir, "classification_report.xlsx")
+
+    # 保存分类报告到Excel
+    macro_f1, macro_recall = save_classification_report_to_excel(
+        all_labels, all_predictions, val_dataset.classes, report_excel_path
+    )
+
+    # 保存测试摘要
+    save_test_summary(result_dir, top1_acc, top5_acc, throughput, fps_per_sample,
+                      len(val_dataset), args.model_name, args.dataset_name, macro_f1, macro_recall)
+
+    # 绘制混淆矩阵
+    print('\n开始绘制混淆矩阵...')
+    plot_confusion_matrix(all_labels, all_predictions, val_dataset.classes, confusion_matrix_path)
+
+    # 提取特征用于t-SNE可视化
+    print('\n开始提取特征用于t-SNE可视化...')
+    features, labels = extract_features(model, val_loader, device)
+
+    # 如果样本太多，随机抽样一部分用于t-SNE
+    if len(features) > args.tsne_samples:
+        indices = np.random.choice(len(features), args.tsne_samples, replace=False)
+        features = features[indices]
+        labels = labels[indices]
+        print(f"已随机选择 {args.tsne_samples} 个样本用于t-SNE可视化")
+
+    # 生成t-SNE可视化图
+    generate_tsne_plot(features, labels, val_dataset.classes, tsne_path)
+
+
+if __name__ == '__main__':
+    main()
