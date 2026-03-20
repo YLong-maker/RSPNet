@@ -24,7 +24,7 @@ Accurate and real-time road surface condition perception is crucial for the plan
 
 | Model | #Params | FLOPs | Resolution | Top-1 (%) | Weights & Logs |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| [RSPNet-S](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 1.41M | 246.4M | 224 x 224 | 91.09 | [model](你的权重链接) \| [log](你的训练日志链接) |
+| [RSPNet-S](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 1.41M | 246.4M | 224 x 224 | 91.09 | [model](你的权重链接) \| [log]() |
 | [RSPNet-M](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 2.17M | 359.3M | 224 x 224 | 91.61 | [model](你的权重链接) \| [log](你的训练日志链接) |
 | [RSPNet-L](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 3.69M | 554.9M | 224 x 224 | 92.03 | [model](你的权重链接) \| [log](你的训练日志链接) |
 
