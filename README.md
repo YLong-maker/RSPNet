@@ -27,3 +27,34 @@ Accurate and real-time road surface condition perception is crucial for the plan
 | [RSPNet-S](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 1.41M | 246.4M | 224 x 224 | 91.09 | [model](你的权重链接) \| [log](你的训练日志链接) |
 | [RSPNet-M](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 2.17M | 359.3M | 224 x 224 | 91.61 | [model](你的权重链接) \| [log](你的训练日志链接) |
 | [RSPNet-L](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 3.69M | 554.9M | 224 x 224 | 92.03 | [model](你的权重链接) \| [log](你的训练日志链接) |
+
+### Prepare Dataset
+
+Download and extract your dataset to construct the following directory structure:
+
+```text
+DATA_SET/
+├── train/
+│   ├── class1/
+│   │   ├── image1.jpg
+│   │   ├── image2.jpg
+│   │   └── ...
+│   ├── class2/
+│   │   └── ...
+│   └── ...
+├── val/
+│   ├── class1/
+│   │   ├── image1.jpg
+│   │   ├── image2.jpg
+│   │   └── ...
+│   ├── class2/
+│   │   └── ...
+│   └── ...
+└── test/
+    ├── class1/
+    │   ├── image1.jpg
+    │   ├── image2.jpg
+    │   └── ...
+    ├── class2/
+    │   └── ...
+    └── ...
