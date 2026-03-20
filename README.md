@@ -20,7 +20,7 @@ Accurate and real-time road surface condition perception is crucial for the plan
 
 ## Main results
 
-#### 1.Road Surface Classification for RSCD:
+#### 1.Road Surface Classification on [RSCD](https://thu-rsxd.com/rscd/):
 
 | Model | #Params | FLOPs | Resolution | Top-1 (%) | Weights & Logs |
 | :--- | :---: | :---: | :---: | :---: | :---: |
@@ -30,7 +30,7 @@ Accurate and real-time road surface condition perception is crucial for the plan
 
 ### Downstream Tasks Results
 
-#### 2. Road Surface Reconstruction on RSRD Dataset
+#### 2. Road Surface Reconstruction on [RSRD](https://thu-rsxd.com/rsrd/) Dataset
 Based on the RoadBEV-mono framework.
 
 | Backbone | Params (M) | Abs.err (cm) ↓ | RMSE (cm) ↓ | >0.5cm (%) ↓ |
@@ -38,7 +38,7 @@ Based on the RoadBEV-mono framework.
 | RSPNet-M | 26.3 | 1.774 | 2.019 | 76.03 |
 
 
-#### 3.Road Surface Segmentation on IDD Dataset
+#### 3.Road Surface Segmentation on [IDD](https://www.kaggle.com/code/mitanshuchakrawarty/semantic-segmentation-of-indian-roads) Dataset
 Evaluated on two different segmentation frameworks.
 
 **Framework: U-Net** 
@@ -51,9 +51,8 @@ Evaluated on two different segmentation frameworks.
 | :--- | :---: | :---: | :---: |
 | RSPNet-L | 4.55 | 28.94 | 89.13 |
 
-### Prepare Other  Dataset:[RSRD](https://thu-rsxd.com/rsrd/),[IDD](https://www.kaggle.com/code/mitanshuchakrawarty/semantic-segmentation-of-indian-roads)
 
-### Prepare [RSCD](https://thu-rsxd.com/rscd/) Dataset
+### Prepare  RSCD Dataset
 
 ```text
 DATA_SET/
