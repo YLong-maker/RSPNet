@@ -1,0 +1,520 @@
+import os
+import sys
+import json
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import transforms, datasets
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+import warnings
+import math
+import argparse
+import time
+import csv
+from datetime import datetime
+import pandas as pd
+warnings.filterwarnings("ignore", category=FutureWarning, message=".*timm.models.layers.*")
+from my_model.RSPNet import RSPNet_L
+def parse_args():
+    parser = argparse.ArgumentParser(description='StarNet Training Script')
+
+    # 训练参数
+    parser.add_argument('--device', default='cuda:0', type=str, help='device to use for training (cuda:0 or cpu)')
+    parser.add_argument('--batch-size', default=256, type=int, help='batch size for training')
+    parser.add_argument('--epochs', default=100, type=int, help='number of epochs to train')
+
+    # 优化器参数
+    parser.add_argument('--base-lr', default=5e-4, type=float, help='base learning rate')
+    parser.add_argument('--weight-decay', default=0.05, type=float, help='weight decay')
+    parser.add_argument('--beta1', default=0.9, type=float, help='beta1 for AdamW')
+    parser.add_argument('--beta2', default=0.999, type=float, help='beta2 for AdamW')
+    parser.add_argument('--eps', default=1e-8, type=float, help='epsilon for AdamW')
+
+    # 学习率调度参数
+    parser.add_argument('--warmup-epochs', default=5, type=int, help='number of warmup epochs')
+
+    # 数据增强参数
+    parser.add_argument('--rotation-degrees', default=15, type=float, help='random rotation degrees')
+    parser.add_argument('--img-size', default=224, type=int, help='input image size')
+
+    # 数据路径参数
+    parser.add_argument('--train-root', default='full_dataset/RSCD dataset-1million/train', type=str,
+                        help='training dataset path')
+    parser.add_argument('--val-root', default='full_dataset/vali_20k', type=str,
+                        help='validation dataset path')
+
+    # 模型保存参数
+    parser.add_argument('--save-dir', default='./training_logs', type=str,
+                        help='directory to save training logs and models')
+    parser.add_argument('--experiment-name', default='farstnet_t0_experiment', type=str, help='name of the experiment')
+
+    # 工作进程参数
+    parser.add_argument('--num-workers', default=8, type=int, help='number of dataloader workers (default: auto)')
+
+    # 预训练权重
+    parser.add_argument('--resume', default='',
+                        type=str, help='path to pretrained weights to resume from')
+
+    return parser.parse_args()
+
+
+def calculate_accuracy(output, target, topk=(1,)):
+    """计算top-k准确率"""
+    maxk = max(topk)
+    batch_size = target.size(0)
+
+    _, pred = output.topk(maxk, 1, True, True)
+    pred = pred.t()
+    correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+    res = []
+    for k in topk:
+        correct_k = correct[:k].reshape(-1).float().sum(0)
+        res.append(correct_k.mul_(100.0 / batch_size))
+    return res
+
+
+class TrainingLogger:
+    def __init__(self, log_dir, experiment_name):
+        self.log_dir = log_dir
+        self.experiment_name = experiment_name
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.experiment_dir = os.path.join(log_dir, f"{experiment_name}_{self.timestamp}")
+
+        # 创建实验目录
+        os.makedirs(self.experiment_dir, exist_ok=True)
+
+        # CSV日志文件路径
+        self.csv_path = os.path.join(self.experiment_dir, 'training_log.csv')
+
+        # 初始化CSV文件
+        with open(self.csv_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['epoch', 'train_loss', 'train_top1_acc', 'train_top5_acc',
+                             'val_loss', 'val_top1_acc', 'val_top5_acc', 'learning_rate', 'epoch_time'])
+
+        # JSON日志文件路径
+        self.json_path = os.path.join(self.experiment_dir, 'training_summary.json')
+
+        # 最佳模型保存路径
+        self.best_model_path = os.path.join(self.experiment_dir, 'best_model.pth')
+
+        # 存储前五模型的列表（每个元素为 (accuracy, epoch, model_path)）
+        self.best_models = []  # 按准确率降序排序，最多保存5个
+
+        print(f"Training logs will be saved to: {self.experiment_dir}")
+
+    def log_epoch(self, epoch, train_loss, train_top1, train_top5,
+                  val_loss, val_top1, val_top5, lr, epoch_time):
+        """记录每个epoch的训练数据"""
+
+        # 写入CSV
+        with open(self.csv_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([epoch, train_loss, train_top1, train_top5,
+                             val_loss, val_top1, val_top5, lr, epoch_time])
+
+        # 打印epoch结果
+        print(f'Epoch {epoch:3d}: '
+              f'Train Loss: {train_loss:.4f} | '
+              f'Train Acc: {train_top1:.2f}% (Top-1), {train_top5:.2f}% (Top-5) | '
+              f'Val Loss: {val_loss:.4f} | '
+              f'Val Acc: {val_top1:.2f}% (Top-1), {val_top5:.2f}% (Top-5) | '
+              f'LR: {lr:.2e} | '
+              f'Time: {epoch_time:.1f}s')
+
+    def save_best_model(self, model, accuracy, epoch):
+        """保存最佳模型"""
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'best_accuracy': accuracy,
+            'timestamp': self.timestamp
+        }, self.best_model_path)
+
+    def save_model(self, model, accuracy, epoch):
+        """保存指定准确率的模型"""
+        model_path = os.path.join(self.experiment_dir, f"model_val_acc_{accuracy:.2f}_epoch_{epoch}.pth")
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'accuracy': accuracy,
+            'timestamp': self.timestamp
+        }, model_path)
+        return model_path
+
+    def check_top5_and_save(self, model, accuracy, epoch):
+        """
+        检查当前模型是否属于前五名，如果是则保存
+        返回：如果模型被保存为前五模型则返回True，否则False
+        """
+        # 如果列表为空，直接添加
+        if len(self.best_models) == 0:
+            model_path = self.save_model(model, accuracy, epoch)
+            self.best_models.append((accuracy, epoch, model_path))
+            print(f"First model saved to top-5 list with accuracy: {accuracy:.2f}%")
+            return True
+
+        # 如果当前准确率高于列表中最低的准确率，或者列表不满5个
+        min_acc_in_list = min(acc for acc, _, _ in self.best_models)
+
+        if accuracy > min_acc_in_list or len(self.best_models) < 5:
+            # 保存当前模型
+            model_path = self.save_model(model, accuracy, epoch)
+
+            # 添加到列表
+            self.best_models.append((accuracy, epoch, model_path))
+
+            # 按准确率降序排序
+            self.best_models.sort(key=lambda x: x[0], reverse=True)
+
+            # 如果超过5个，移除准确率最低的
+            if len(self.best_models) > 5:
+                # 找到准确率最低的模型（如果有多个相同准确率，取epoch最小的）
+                min_acc = min(acc for acc, _, _ in self.best_models)
+                candidates = [(acc, ep, path) for acc, ep, path in self.best_models if acc == min_acc]
+                # 如果有多个相同准确率的，取epoch最小的
+                to_remove = min(candidates, key=lambda x: x[1])
+
+                # 从列表中移除
+                self.best_models.remove(to_remove)
+                _, _, path_to_remove = to_remove
+
+                # 删除文件
+                try:
+                    os.remove(path_to_remove)
+                    print(f"Removed model with accuracy {min_acc:.2f}% from top-5 list")
+                except Exception as e:
+                    print(f"Error removing model file {path_to_remove}: {str(e)}")
+
+            print(f"Model saved to top-5 list with accuracy: {accuracy:.2f}%")
+            return True
+        else:
+            print(f"Model not in top-5 (current min: {min_acc_in_list:.2f}%, current: {accuracy:.2f}%)")
+            return False
+
+    def save_training_summary(self, config, best_accuracy, total_training_time):
+        """保存训练总结"""
+        # 收集前五模型信息
+        top5_info = []
+        for i, (acc, epoch, path) in enumerate(self.best_models, 1):
+            top5_info.append({
+                'rank': i,
+                'accuracy': acc,
+                'epoch': epoch,
+                'model_path': os.path.basename(path)
+            })
+
+        summary = {
+            'experiment_name': self.experiment_name,
+            'timestamp': self.timestamp,
+            'total_training_time_seconds': total_training_time,
+            'total_training_time_hours': total_training_time / 3600,
+            'best_accuracy': best_accuracy,
+            'top5_models': top5_info,
+            'training_config': config,
+            'log_files': {
+                'csv_log': self.csv_path,
+                'json_summary': self.json_path,
+                'best_model': self.best_model_path,
+                'class_indices': os.path.join(self.experiment_dir, 'class_indices.json')
+            }
+        }
+
+        with open(self.json_path, 'w') as f:
+            json.dump(summary, f, indent=4)
+
+        return summary
+
+
+def main():
+    args = parse_args()
+
+    # 创建训练日志器
+    logger = TrainingLogger(args.save_dir, args.experiment_name)
+
+    # 设置设备
+    if args.device.startswith('cuda') and not torch.cuda.is_available():
+        print(f"Warning: {args.device} is not available, using CPU instead")
+        device = torch.device('cpu')
+    else:
+        device = torch.device(args.device)
+    print("using {} device.".format(device))
+
+    linear_scaled_lr = args.base_lr
+
+    # 数据增强
+    data_transform = {
+        "train": transforms.Compose([
+            transforms.RandomResizedCrop(args.img_size),
+            transforms.RandomRotation(args.rotation_degrees),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ]),
+        "val": transforms.Compose([
+            transforms.Resize(int(args.img_size * 1.14)),  # 256 for 224 input
+            transforms.CenterCrop(args.img_size),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
+    }
+
+    # 检查数据集路径
+    assert os.path.exists(args.train_root), "{} path does not exist.".format(args.train_root)
+    assert os.path.exists(args.val_root), "{} path does not exist.".format(args.val_root)
+
+    # 加载数据集
+    train_dataset = datasets.ImageFolder(root=args.train_root, transform=data_transform["train"])
+    validate_dataset = datasets.ImageFolder(root=args.val_root, transform=data_transform["val"])
+
+    train_num = len(train_dataset)
+    val_num = len(validate_dataset)
+
+    # 获取类别信息
+    flower_list = train_dataset.class_to_idx
+    cla_dict = dict((val, key) for key, val in flower_list.items())
+
+    # 写入类别索引文件到实验目录
+    json_str = json.dumps(cla_dict, indent=4)
+    with open(os.path.join(logger.experiment_dir, 'class_indices.json'), 'w') as json_file:
+        json_file.write(json_str)
+
+    # 设置工作进程数
+    if args.num_workers is None:
+        nw = min([os.cpu_count(), args.batch_size if args.batch_size > 1 else 0, 8])
+    else:
+        nw = args.num_workers
+
+    print('Using {} dataloader workers every process'.format(nw))
+
+    # 创建数据加载器
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=nw,
+        pin_memory=True
+    )
+
+    validate_loader = DataLoader(
+        validate_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=nw,
+        pin_memory=True
+    )
+
+    print("Using {} images for training, {} images for validation.".format(train_num, val_num))
+    print("Number of classes: {}".format(len(flower_list)))
+    print("Using learning rate: {:.2e}".format(linear_scaled_lr))
+
+    # 创建模型
+    num_classes = len(flower_list)
+    net = RSCNet_L()   # 根 SwiftFormer_XS()据实际情况调整mobileone(num_classes=27, inference_mode=False, variant="s0")
+
+    # 加载预训练权重（如果提供）
+    if args.resume and os.path.exists(args.resume):
+        print(f"Loading pretrained weights from {args.resume}")
+        # pre_weights = torch.load(args.resume, map_location='cpu')
+        # 修改加载部分
+        checkpoint = torch.load(args.resume, map_location='cpu')
+
+        # 尝试不同的键名
+        if 'model_state_dict' in checkpoint:
+            pre_weights = checkpoint['model_state_dict']
+        elif 'state_dict' in checkpoint:
+            pre_weights = checkpoint['state_dict']
+        elif 'model' in checkpoint:
+            pre_weights = checkpoint['model']
+        else:
+            pre_weights = checkpoint  # 可能是直接的state_dict
+
+        # 如果模型结构不完全匹配，尝试部分加载
+        if isinstance(pre_weights, dict):
+            model_dict = net.state_dict()
+            # 过滤不匹配的键
+            pretrained_dict = {k: v for k, v in pre_weights.items()
+                               if k in model_dict and model_dict[k].shape == v.shape}
+            # 更新模型参数
+            model_dict.update(pretrained_dict)
+            net.load_state_dict(model_dict)
+            print(f"Loaded {len(pretrained_dict)}/{len(model_dict)} parameters")
+        else:
+            net.load_state_dict(pre_weights)
+            print("Pretrained weights loaded successfully")
+    else:
+        if args.resume:
+            print(f"Warning: Pretrained weights path {args.resume} does not exist, training from scratch")
+        else:
+            print("No pretrained weights specified, training from scratch")
+
+    net.to(device)
+
+    # 定义损失函数
+    loss_function = nn.CrossEntropyLoss()
+
+    # 构造优化器
+    params = [p for p in net.parameters() if p.requires_grad]
+    optimizer = optim.AdamW(
+        params,
+        lr=linear_scaled_lr,
+        weight_decay=args.weight_decay,
+        betas=(args.beta1, args.beta2),
+        eps=args.eps
+    )
+
+    # 学习率调度器
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=args.epochs - args.warmup_epochs
+    )
+
+    best_acc = 0.0
+    train_steps = len(train_loader)
+
+    # 打印训练配置
+    config = {
+        'batch_size': args.batch_size,
+        'epochs': args.epochs,
+        'base_learning_rate': args.base_lr,
+        'scaled_learning_rate': linear_scaled_lr,
+        'weight_decay': args.weight_decay,
+        'warmup_epochs': args.warmup_epochs,
+        'image_size': args.img_size,
+        'rotation_degrees': args.rotation_degrees,
+        'train_samples': train_num,
+        'val_samples': val_num,
+        'num_classes': len(flower_list),
+        'device': str(device),
+        'optimizer': 'AdamW',
+        'scheduler': 'CosineAnnealingLR with Warmup'
+    }
+
+    print("\nTraining Configuration:")
+    for key, value in config.items():
+        print(f"  {key}: {value}")
+
+    # 开始训练计时
+    start_time = time.time()
+
+    # 训练循环
+    for epoch in range(args.epochs):
+        epoch_start_time = time.time()
+
+        # 线性warmup
+        if epoch < args.warmup_epochs:
+            warmup_factor = (epoch + 1) / args.warmup_epochs
+            current_lr = linear_scaled_lr * warmup_factor
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = current_lr
+
+        # 训练阶段
+        net.train()
+        running_loss = 0.0
+        train_top1_acc = 0.0
+        train_top5_acc = 0.0
+
+        train_bar = tqdm(train_loader, file=sys.stdout)
+        for step, data in enumerate(train_bar):
+            images, labels = data
+            images, labels = images.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+            logits = net(images)
+            loss = loss_function(logits, labels)
+            loss.backward()
+            optimizer.step()
+
+            # 计算准确率
+            acc1, acc5 = calculate_accuracy(logits, labels, topk=(1, 5))
+
+            running_loss += loss.item()
+            train_top1_acc += acc1.item()
+            train_top5_acc += acc5.item()
+
+            current_lr = optimizer.param_groups[0]['lr']
+            train_bar.desc = "train epoch[{}/{}] loss:{:.3f} acc:{:.2f}%".format(
+                epoch + 1, args.epochs, loss, acc1.item())
+
+        # 计算平均训练指标
+        train_loss = running_loss / train_steps
+        train_top1 = train_top1_acc / train_steps
+        train_top5 = train_top5_acc / train_steps
+
+        # 更新学习率（warmup阶段后使用cosine annealing）
+        if epoch >= args.warmup_epochs:
+            scheduler.step()
+
+        # 验证阶段
+        net.eval()
+        val_loss = 0.0
+        val_top1_acc = 0.0
+        val_top5_acc = 0.0
+        val_steps = len(validate_loader)
+
+        with torch.no_grad():
+            val_bar = tqdm(validate_loader, file=sys.stdout)
+            for val_data in val_bar:
+                val_images, val_labels = val_data
+                val_images, val_labels = val_images.to(device), val_labels.to(device)
+
+                outputs = net(val_images)
+                loss = loss_function(outputs, val_labels)
+
+                # 计算验证准确率
+                acc1, acc5 = calculate_accuracy(outputs, val_labels, topk=(1, 5))
+
+                val_loss += loss.item()
+                val_top1_acc += acc1.item()
+                val_top5_acc += acc5.item()
+
+                val_bar.desc = "valid epoch[{}/{}]".format(epoch + 1, args.epochs)
+
+        # 计算平均验证指标
+        val_loss = val_loss / val_steps
+        val_top1 = val_top1_acc / val_steps
+        val_top5 = val_top5_acc / val_steps
+
+        # 计算epoch时间
+        epoch_time = time.time() - epoch_start_time
+
+        # 记录epoch结果
+        current_lr = optimizer.param_groups[0]['lr']
+        logger.log_epoch(
+            epoch + 1, train_loss, train_top1, train_top5,
+            val_loss, val_top1, val_top5, current_lr, epoch_time
+        )
+
+        # 保存最佳模型
+        if val_top1 > best_acc:
+            best_acc = val_top1
+            logger.save_best_model(net, best_acc, epoch + 1)
+            print(f"*** New best model saved with validation accuracy: {best_acc:.2f}% ***")
+
+        # 检查并保存前五模型
+        logger.check_top5_and_save(net, val_top1, epoch + 1)
+
+    # 计算总训练时间
+    total_training_time = time.time() - start_time
+
+    # 保存训练总结
+    summary = logger.save_training_summary(config, best_acc, total_training_time)
+
+    print('\n' + '=' * 50)
+    print('Finished Training')
+    print(f'Best validation accuracy: {best_acc:.2f}%')
+
+    # 打印前五模型
+    print("\nTop-5 Models:")
+    for i, (acc, ep, path) in enumerate(logger.best_models, 1):
+        print(f"{i}. Epoch {ep}: Val Acc {acc:.2f}% - {os.path.basename(path)}")
+
+    print(f'Total training time: {total_training_time / 3600:.2f} hours')
+    print(f'All logs and models saved to: {logger.experiment_dir}')
+    print('=' * 50)
+
+
+if __name__ == '__main__':
+    main()
