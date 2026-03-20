@@ -43,6 +43,7 @@ Evaluated on two different segmentation frameworks.
 | Backbone | Params (M) | GFLOPs | mIOU (%) ↑ |
 | :--- | :---: | :---: | :---: |
 | RSPNet-L | 6.52 | 84.17 | 87.57 |
+
 **Framework: U-Net** 
 | Backbone | Params (M) | GFLOPs | mIOU (%) ↑ |
 | :--- | :---: | :---: | :---: |
