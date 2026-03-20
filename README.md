@@ -20,7 +20,7 @@ Accurate and real-time road surface condition perception is crucial for the plan
 
 ## Main results
 
-#### 1.Road Surface Classification on [RSCD](https://thu-rsxd.com/rscd/):
+#### 1.Road Surface Classification on [RSCD](https://thu-rsxd.com/rscd/)
 
 | Model | #Params | FLOPs | Resolution | Top-1 (%) | Weights & Logs |
 | :--- | :---: | :---: | :---: | :---: | :---: |
