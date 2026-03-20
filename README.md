@@ -51,9 +51,7 @@ Evaluated on two different segmentation frameworks.
 | :--- | :---: | :---: | :---: |
 | RSPNet-L | 4.55 | 28.94 | 89.13 |
 
-### Prepare Dataset
-
-Download and extract your dataset to construct the following directory structure:
+### Prepare RSCD(https://thu-rsxd.com/rscd/) Dataset
 
 ```text
 DATA_SET/
