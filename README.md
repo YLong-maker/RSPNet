@@ -29,14 +29,22 @@ Accurate and real-time road surface condition perception is crucial for the plan
 | [RSPNet-M](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 2.17M | 359.3M | 224 x 224 | 91.61 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/model_val_acc_89.86_epoch_96.pth) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/log/RSCNet_M.csv) |
 | [RSPNet-L](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 3.69M | 554.9M | 224 x 224 | 92.03 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/model_val_acc_90.52_epoch_95.pth) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/log/RSCNet_L.csv) |
 
-#### 2. Road Surface Reconstruction on [RSRD](https://thu-rsxd.com/rsrd/) Dataset
+### 2.Road Surface Classification on RSCD-Expand
+
+| Model | Top-1 (%) ↑ | Top-5 (%) ↑ | F1 (%) ↑ | Recall (%) ↑ | Weights & Logs |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| [RSPNet-S](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 91.03 | 99.85 | 88.84 | 88.46 | [model](这里替换为S的权重链接) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/log/RSCNet_S.csv) |
+| [RSPNet-M](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 91.72 | 99.85 | 89.95 | 89.60 | [model](这里替换为M的权重链接) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/log/RSCNet_M.csv) |
+| [RSPNet-L](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 91.87 | 99.82 | 90.01 | 89.62 | [model](这里替换为L的权重链接) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/log/RSCNet_L.csv) |
+
+#### 3. Road Surface Reconstruction on [RSRD](https://thu-rsxd.com/rsrd/) Dataset
 Based on the RoadBEV-mono framework.
 
 | Backbone | Params (M) | Abs.err (cm) ↓ | RMSE (cm) ↓ | >0.5cm (%) ↓ |
 | :--- | :---: | :---: | :---: | :---: |
 | RSPNet-M | 26.3 | 1.774 | 2.019 | 76.03 |
 
-#### 3.Road Surface Segmentation on [IDD](https://www.kaggle.com/code/mitanshuchakrawarty/semantic-segmentation-of-indian-roads) Dataset
+#### 4.Road Surface Segmentation on [IDD](https://www.kaggle.com/code/mitanshuchakrawarty/semantic-segmentation-of-indian-roads) Dataset
 Evaluated on two different segmentation frameworks.
 
 **Framework: Semantic FPN**
