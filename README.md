@@ -51,6 +51,8 @@ Evaluated on two different segmentation frameworks.
 | :--- | :---: | :---: | :---: |
 | RSPNet-L | 4.55 | 28.94 | 89.13 |
 
+### Prepare Other  Dataset:[RSRD](https://thu-rsxd.com/rsrd/),[IDD](https://www.kaggle.com/code/mitanshuchakrawarty/semantic-segmentation-of-indian-roads)
+
 ### Prepare [RSCD](https://thu-rsxd.com/rscd/) Dataset
 
 ```text
@@ -80,4 +82,3 @@ DATA_SET/
     │   └── ...
     └── ...
 
-### Prepare Other  Dataset:[RSRD](https://thu-rsxd.com/rsrd/),[IDD](https://www.kaggle.com/code/mitanshuchakrawarty/semantic-segmentation-of-indian-roads)
