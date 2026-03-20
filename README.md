@@ -21,6 +21,10 @@ Accurate and real-time road surface condition perception is crucial for the plan
     <img src="https://github.com/user-attachments/assets/c5a71bf8-f160-47d0-b7fc-58041e0c4725" alt="para" width="502" height="385" />
 </div>
 
+| Dataset Creation and Processing | Performance of road surface classification on RSCD |
+| :---: | :---: |
+| <img src="https://github.com/user-attachments/assets/19049e10-d905-48ca-9eae-02736ac29754" alt="数据采集_01" width="100%" /> | <img src="https://github.com/user-attachments/assets/c5a71bf8-f160-47d0-b7fc-58041e0c4725" alt="para" width="100%" /> |
+
 ### deployment，Please visit the demo video at https://youtu.be/Nb3Xa4FwHR0
 <img width="1004" height="283" alt="image" src="https://github.com/user-attachments/assets/07850c2f-a5ec-478a-9323-0a41d8ef6f5e" />
 
