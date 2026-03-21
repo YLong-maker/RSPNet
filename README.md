@@ -38,7 +38,7 @@ Accurate and real-time road surface condition perception is crucial for the plan
 | [RSPNet-L](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 91.87 | 99.82 | 90.01 | 89.62 | [model](这里替换为L的权重链接) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/log/RSCNet_L.csv) |
 
 #### 3. Road Surface Reconstruction on [RSRD](https://thu-rsxd.com/rsrd/) Dataset
-Based on the RoadBEV-mono framework.
+Based on the [RoadBEV](https://ieeexplore.ieee.org/document/10618926)-mono framework.
 
 | Backbone | Params (M) | Abs.err (cm) ↓ | RMSE (cm) ↓ | >0.5cm (%) ↓ |
 | :--- | :---: | :---: | :---: | :---: |
