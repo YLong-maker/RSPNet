@@ -34,7 +34,7 @@ Accurate and real-time road surface condition perception is crucial for the plan
 | Model | Top-1 (%) ↑ | Top-5 (%) ↑ | F1 (%) ↑ | Recall (%) ↑ | Weights & Logs |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | [RSPNet-S](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 91.03 | 99.85 | 88.84 | 88.46 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/model_val_acc_88.92_epoch_90_ex.pth) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/weight/RSPNet_S_ex.csv) |
-| [RSPNet-M](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 91.72 | 99.85 | 89.95 | 89.60 | [model](这里替换为M的权重链接) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/log/RSCNet_M.csv) |
+| [RSPNet-M](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 91.72 | 99.85 | 89.95 | 89.60 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/model_val_acc_89.49_epoch_94_ex.pth) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/log/RSCNet_M.csv) |
 | [RSPNet-L](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 91.87 | 99.82 | 90.01 | 89.62 | [model](这里替换为L的权重链接) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/log/RSCNet_L.csv) |
 
 #### 3. Road Surface Reconstruction on [RSRD](https://thu-rsxd.com/rsrd/) Dataset
