@@ -47,7 +47,7 @@ Based on the [RoadBEV](https://ieeexplore.ieee.org/document/10618926)-mono frame
 #### 4.Road Surface Segmentation on [IDD](https://www.kaggle.com/code/mitanshuchakrawarty/semantic-segmentation-of-indian-roads) Dataset
 Evaluated on two different segmentation frameworks.
 
-**Framework: Semantic FPN**
+**Framework: [Semantic FPN][IDD](https://arxiv.org/abs/1901.02446)**
 | Backbone | Params (M) | GFLOPs | mIOU (%) ↑ |
 | :--- | :---: | :---: | :---: |
 | RSPNet-L | 6.52 | 84.17 | 87.57 |
