@@ -49,14 +49,14 @@ Accurate and real-time road surface condition perception is crucial for the plan
 Evaluated on two different segmentation frameworks.
 
 **Framework: [Semantic FPN](https://arxiv.org/abs/1901.02446)**
-| Backbone | Params (M) | GFLOPs | mIOU (%) ↑ |
-| :--- | :---: | :---: | :---: |
-| RSPNet-L | 6.52 | 84.17 | 87.57 |
+| Backbone | Params (M) | GFLOPs | mIOU (%) ↑ | Weights |
+| :--- | :---: | :---: | :---: | :---: |
+| RSPNet-L | 6.52 | 84.17 | 87.57 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/epoch_50_miou_0.9090.pth) |
 
 **Framework: [U-Net](https://arxiv.org/abs/1505.04597)** 
 | Backbone | Params (M) | GFLOPs | mIOU (%) ↑ | Weights |
 | :--- | :---: | :---: | :---: | :---: |
-| RSPNet-L | 4.55 | 28.94 | 89.13 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/model_val_acc_88.92_epoch_90_ex.pth) |
+| RSPNet-L | 4.55 | 28.94 | 89.13 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/epoch_50_miou_0.9090.pth) |
 
 
 ### Prepare  RSCD/RSCD-Expand Dataset
