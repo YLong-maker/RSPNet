@@ -54,9 +54,9 @@ Evaluated on two different segmentation frameworks.
 | RSPNet-L | 6.52 | 84.17 | 87.57 |
 
 **Framework: [U-Net](https://arxiv.org/abs/1505.04597)** 
-| Backbone | Params (M) | GFLOPs | mIOU (%) ↑ |
-| :--- | :---: | :---: | :---: |
-| RSPNet-L | 4.55 | 28.94 | 89.13 |
+| Backbone | Params (M) | GFLOPs | mIOU (%) ↑ | Weights |
+| :--- | :---: | :---: | :---: | :---: |
+| RSPNet-L | 4.55 | 28.94 | 89.13 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/model_val_acc_88.92_epoch_90_ex.pth) |
 
 
 ### Prepare  RSCD/RSCD-Expand Dataset
