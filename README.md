@@ -51,7 +51,7 @@ Evaluated on two different segmentation frameworks.
 **Framework: [Semantic FPN](https://arxiv.org/abs/1901.02446)**
 | Backbone | Params (M) | GFLOPs | mIOU (%) ↑ | Weights |
 | :--- | :---: | :---: | :---: | :---: |
-| RSPNet-L | 6.52 | 84.17 | 87.57 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/epoch_50_miou_0.9090.pth) |
+| RSPNet-L | 6.52 | 84.17 | 87.57 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/epoch_46_miou_0.9065_.pth) |
 
 **Framework: [U-Net](https://arxiv.org/abs/1505.04597)** 
 | Backbone | Params (M) | GFLOPs | mIOU (%) ↑ | Weights |
