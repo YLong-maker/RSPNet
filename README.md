@@ -87,4 +87,33 @@ DATA_SET/
     ├── class2/
     │   └── ...
     └── ...
+```
+### Prepare RSRD Dataset
+```text
+Please follow the dataset setup method of the RoadBEV open-source code
+``` 
+### Prepare IDD Dataset
 
+Please organize the IDD dataset in the standard VOC format as shown below:
+
+```text
+data_new/
+└── VOC2012/
+    ├── ImageSets/
+    │   └── segmentation/
+    │       ├── test.txt
+    │       ├── train.txt
+    │       └── val.txt
+    ├── JPEGImages/
+    │   ├── Image_0.jpg
+    │   ├── Image_1.jpg
+    │   ├── Image_2.jpg
+    │   ├── Image_3.jpg
+    │   └── Image_4.jpg
+    └── SegmentationClass/
+        ├── Image_0.png
+        ├── Image_1.png
+        ├── Image_2.png
+        ├── Image_3.png
+        └── Image_4.png
+``` 
