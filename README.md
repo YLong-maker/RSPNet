@@ -60,7 +60,7 @@ Evaluated on two different segmentation frameworks.
 
 ## Dataset Prepared
 
-### Prepare  RSCD/RSCD-Expand Dataset
+### 1. Prepare  RSCD/RSCD-Expand Dataset
 
 ```text
 DATA_SET/
@@ -89,11 +89,11 @@ DATA_SET/
     │   └── ...
     └── ...
 ```
-### Prepare RSRD Dataset
+### 2. Prepare RSRD Dataset
 ```text
 Please follow the dataset setup method of the RoadBEV open-source code
 ``` 
-### Prepare IDD Dataset
+### 3. Prepare IDD Dataset
 
 Please organize the IDD dataset in the standard VOC format as shown below:
 
