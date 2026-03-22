@@ -1,0 +1,250 @@
+import os
+from functools import partial 
+import numpy as np 
+import torch 
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader 
+import time
+import datetime
+import subprocess
+from fpn_1.RSPNet_FPN import FPN
+from model.training import get_lr_scheduler, set_optimizer_lr, weights_init
+from utils.dataloader import Dataset, dataset_collate
+from utils.utils import seed_everything, worker_init_fn
+from utils.train_and_eval import train_one_epoch, evaluate
+
+from utils.create_exp_folder import create_exp_folder
+from utils.plot_results import plot_training_curves
+
+def worker_init_wrapper(worker_id):
+    return worker_init_fn(worker_id=worker_id, rank=0, seed=11)
+
+def get_gpu_usage():
+    try:
+        result = subprocess.check_output(
+            ['nvidia-smi', '--query-gpu=memory.used,memory.total', '--format=csv,nounits,noheader'],
+            encoding='utf-8'
+        )
+        used, total = map(int, result.strip().split(','))
+        return used
+    except:
+        return 0
+
+
+def smart_weight_loading(model, pretrained_weights_path):
+    checkpoint = torch.load(pretrained_weights_path, map_location='cpu')
+
+    # 2. 提取分类模型的权重字典（明确保存在 'model_state_dict' 中）
+    if 'model_state_dict' in checkpoint:
+        pretrained_dict = checkpoint['model_state_dict']
+    else:
+        raise KeyError(f"在预训练权重 {pretrained_weights_path} 中未找到 'model_state_dict' 键！")
+
+    # 3. 获取当前分割模型的状态字典
+    model_dict = model.state_dict()
+
+    # 4. 匹配分类权重到分割主干网络
+    matched_keys = {}
+    for pre_key, pre_weight in pretrained_dict.items():
+        # 清理可能存在的 'module.' 前缀（多卡训练残留）
+        clean_pre_key = pre_key.replace('module.', '')
+
+        # 遍历当前分割模型的所有键寻找匹配项
+        for model_key in model_dict.keys():
+            # 如果分类模型的键名包含在分割模型的键名中（例如分类的 'stage1...' 对应分割的 'fpn.backbone.stage1...'）
+            # 并且两者的张量形状完全一致
+            if clean_pre_key in model_key and model_dict[model_key].shape == pre_weight.shape:
+                matched_keys[model_key] = pre_weight
+                break  # 找到匹配即跳出内层循环
+
+    # 5. 更新模型字典并加载
+    if matched_keys:
+        model_dict.update(matched_keys)
+        model.load_state_dict(model_dict, strict=False)
+        print(f"成功从分类模型迁移并加载了 {len(matched_keys)} 个主干网络参数。")
+    else:
+        print("警告：未能在模型中找到与分类预训练权重匹配的参数！")
+
+    return model
+
+
+# 新增：包装器，将 FPN 的字典输出转换为张量
+class FPNWrapper(nn.Module):
+    def __init__(self, fpn):
+        super().__init__()
+        self.fpn = fpn
+
+    def forward(self, x):
+        out = self.fpn(x)
+        return out['out']  # 仅返回分割 logits
+
+
+def create_model(num_classes, weights):
+    fpn = FPN(num_classes=num_classes, back_bone='rspnet_l')
+    model = FPNWrapper(fpn)  # 包装为输出 logits
+
+    # 先使用随机初始化（可选，FPN 构建时已随机初始化）
+    weights_init(model)
+
+    # 检查是否提供了预训练权重路径
+    if weights and os.path.exists(weights):
+        print(f"\n正在从 {weights} 加载权重...")
+
+        # 调试：打印模型参数结构
+        print("\n模型参数结构（前20个参数）:")
+        for i, (name, param) in enumerate(model.state_dict().items()):
+            if i < 20:
+                print(f"  {name}: {param.shape}")
+            else:
+                print(f"  ... 还有 {len(list(model.state_dict().items())) - 20} 个参数")
+                break
+
+        # 使用智能权重加载
+        model = smart_weight_loading(model, weights)
+
+        print("-" * 50)
+        print("权重加载完成。")
+        print("-" * 50 + "\n")
+    else:
+        print("未提供权重文件或文件不存在，将从随机初始化开始训练。")
+
+    return model
+
+
+def get_optimizer_and_lr(model, batch_size, train_epoch, momentum, weight_decay):
+    Init_lr = 1e-4
+    Min_lr = Init_lr * 0.01
+    lr_decay_type = 'cos'
+    nbs = 16
+    lr_limit_max = 1e-4
+    lr_limit_min = 1e-4
+
+    Init_lr_fit = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
+    Min_lr_fit = min(max(batch_size / nbs * Min_lr, lr_limit_min * 1e-2), lr_limit_max * 1e-2)
+
+    optimizer = optim.Adam(model.parameters(), Init_lr_fit, betas=(momentum, 0.999),
+                           weight_decay=weight_decay)
+    lr_scheduler_func = get_lr_scheduler(lr_decay_type, Init_lr_fit, Min_lr_fit, train_epoch)
+    return optimizer, lr_scheduler_func
+
+
+def train(args):
+    seed_everything(11)
+
+    num_classes = args.num_classes + 1  # 类别加上背景类
+    train_epoch = args.epochs
+    batch_size = args.batch_size
+    num_workers = args.workers
+
+    device = torch.device(args.device if torch.cuda.is_available() else "cpu")
+    exp_folder, weights_folder = create_exp_folder()
+    input_shape = [512, 512]
+
+    # 数据集加载
+    train_dataset = Dataset(args.data_path, input_shape, num_classes, augmentation=True, txt_name="train.txt")
+    val_dataset = Dataset(args.data_path, input_shape, num_classes, augmentation=False, txt_name="val.txt")
+
+    # 使用顶层定义的 worker_init_wrapper 替代 lambda 函数以解决序列化问题
+    train_loader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size, num_workers=num_workers,
+                              pin_memory=True, drop_last=False, collate_fn=dataset_collate,
+                              worker_init_fn=worker_init_wrapper)
+
+    val_loader = DataLoader(val_dataset, shuffle=True, batch_size=batch_size, num_workers=num_workers,
+                            pin_memory=True, drop_last=False, collate_fn=dataset_collate,
+                            worker_init_fn=worker_init_wrapper)
+
+    # 创建模型并加载迁移权重
+    model = create_model(num_classes=num_classes, weights=args.weights)
+    model.to(device)
+
+    # 修复：使用新的 GradScaler API
+    scaler = torch.amp.GradScaler('cuda') if args.amp else None
+
+    optimizer, lr_scheduler_func = get_optimizer_and_lr(model, batch_size, train_epoch, args.momentum,
+                                                        args.weight_decay)
+
+    start_time = time.time()
+
+    # 初始化miou排名列表，保存前5个最好的模型
+    top_miou_models = []  # 每个元素是 (miou, epoch, model_path)
+    last_model_path = os.path.join(weights_folder, f"last_model_{args.num_classes}.pth")
+
+    train_losses, val_losses, val_metrics_history = [], [], []
+    focal_loss = True
+    dice_loss = True
+
+    for epoch in range(train_epoch):
+        gpu_used = get_gpu_usage()
+        set_optimizer_lr(optimizer, lr_scheduler_func, epoch)
+
+        loss = train_one_epoch(model, optimizer, train_loader, device, dice_loss, focal_loss,
+                               gpu_used, num_classes, scaler, epoch, train_epoch)
+        train_losses.append(loss)
+
+        metrics = evaluate(model, val_loader, device, dice_loss, focal_loss, num_classes)
+        val_losses.append(metrics["Loss"])
+        val_metrics_history.append(metrics)
+
+        current_miou = float(metrics["Mean IoU"])
+        print(f"Epoch {epoch + 1}/{train_epoch} - MIoU: {current_miou:.4f}")
+
+        # 保存当前epoch的模型
+        current_model_path = os.path.join(weights_folder, f"epoch_{epoch + 1}_miou_{current_miou:.4f}.pth")
+        torch.save(model.state_dict(), current_model_path)
+
+        # 更新miou排名前5的模型
+        top_miou_models.append((current_miou, epoch + 1, current_model_path))
+        # 按miou降序排序
+        top_miou_models.sort(key=lambda x: x[0], reverse=True)
+        # 只保留前5个
+        if len(top_miou_models) > 5:
+            # 删除第6个及以后的模型文件（从磁盘删除）
+            for _, _, model_path in top_miou_models[5:]:
+                if os.path.exists(model_path):
+                    os.remove(model_path)
+            # 只保留前5个在列表中
+            top_miou_models = top_miou_models[:5]
+
+    # 保存最后一个epoch的模型
+    torch.save(model.state_dict(), last_model_path)
+
+    # 打印miou排名前5的模型信息
+    print("\n" + "=" * 60)
+    print("MIoU排名前5的模型:")
+    print("=" * 60)
+    for i, (miou, epoch_num, model_path) in enumerate(top_miou_models, 1):
+        print(f"第{i}名: Epoch {epoch_num}, MIoU: {miou:.4f}")
+        # 复制这些模型到更明显的文件名
+        top_model_copy_path = os.path.join(weights_folder, f"top_{i}_epoch_{epoch_num}_miou_{miou:.4f}.pth")
+        if os.path.exists(model_path):
+            import shutil
+            shutil.copy2(model_path, top_model_copy_path)
+            print(f"  已保存为: {top_model_copy_path}")
+    print("=" * 60)
+
+    total_time = time.time() - start_time
+    print(f"训练总耗时: {str(datetime.timedelta(seconds=int(total_time)))}")
+    plot_training_curves(train_losses, val_losses, val_metrics_history, weights_folder)
+
+
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(description="FPN Segmentation Training")
+    parser.add_argument("--weights", default="D:\\project\\u_net\\源码\\U-Net\\weight\\RSCNet_L\\model_val_acc_90.52_epoch_95.pth",
+                        help="预训练分类模型权重路径")
+    parser.add_argument("--data-path", default="D:\\project\\u_net\\源码\\U-Net\\data_new", help="数据集根路径")
+    parser.add_argument("--num-classes", default=1, type=int, help="分割类别数（不含背景）")
+    parser.add_argument("--device", default="cuda", help="训练设备")
+    parser.add_argument("--batch-size", default=8, type=int)
+    parser.add_argument("--epochs", default=50, type=int)
+    parser.add_argument("--workers", default=0, type=int)
+    parser.add_argument('--momentum', default=0.9, type=float)
+    parser.add_argument('--weight-decay', default=1e-4, type=float)
+    parser.add_argument("--amp", default=True, type=bool, help="使用混合精度训练")
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    train(args)
