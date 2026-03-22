@@ -2,16 +2,9 @@
 import torch  # 导入PyTorch库
 from torch.utils.data import DataLoader  # 导入数据加载器模块
 import time
-
-# 导入自定义模块和模型
-# from model.URSCNet import URSCnet  # 导入U-Net模型
-# from model.mobilenetv3 import U_mobilenetv3
-# from model.shuffer_Net import shuffernet_unet
-# from model. fasternnet_T0 import U_fasternet_t0
-# from model.GhostNetv3 import U_ghostnetv3_1
-from utils.dataloader import Dataset, dataset_collate  # 导入U-Net数据集及其合并函数
+from model.RSPNet import RSPNet_L
+from utils.dataloader import Dataset, dataset_collate 
 from utils.train_and_eval import mean_iou
-# from fpn_1.RSPNet_FPN import FPN
 from model.mobileone_s0 import U_mobileone_s0
 
 class LogColor:
