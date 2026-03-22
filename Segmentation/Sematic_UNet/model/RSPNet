@@ -1,0 +1,429 @@
+import torch
+from timm.layers import trunc_normal_
+import torch.nn as nn
+from timm.models.layers import DropPath
+from typing import Callable, List, Optional
+from thop import profile
+import pywt
+import torch.nn.functional as F
+
+
+def create_2d_wavelet_filter(wave, in_size, out_size, type=torch.float):
+    w = pywt.Wavelet(wave)
+    dec_hi = torch.tensor(w.dec_hi[::-1], dtype=type)
+    dec_lo = torch.tensor(w.dec_lo[::-1], dtype=type)
+    dec_filters = torch.stack([dec_lo.unsqueeze(0) * dec_lo.unsqueeze(1),
+                               dec_lo.unsqueeze(0) * dec_hi.unsqueeze(1),
+                               dec_hi.unsqueeze(0) * dec_lo.unsqueeze(1),
+                               dec_hi.unsqueeze(0) * dec_hi.unsqueeze(1)], dim=0)
+
+    dec_filters = dec_filters[:, None].repeat(in_size, 1, 1, 1)
+
+    rec_hi = torch.tensor(w.rec_hi, dtype=type)
+    rec_lo = torch.tensor(w.rec_lo, dtype=type)
+    rec_filters = torch.stack([rec_lo.unsqueeze(0) * rec_lo.unsqueeze(1),
+                               rec_lo.unsqueeze(0) * rec_hi.unsqueeze(1),
+                               rec_hi.unsqueeze(0) * rec_lo.unsqueeze(1),
+                               rec_hi.unsqueeze(0) * rec_hi.unsqueeze(1)], dim=0)
+
+    rec_filters = rec_filters[:, None].repeat(out_size, 1, 1, 1)
+
+    return dec_filters, rec_filters
+
+
+def wavelet_2d_transform(x, filters):
+    b, c, h, w = x.shape
+    pad = (filters.shape[2] // 2 - 1, filters.shape[3] // 2 - 1)
+    x = F.conv2d(x, filters, stride=2, groups=c, padding=pad)
+    x = x.reshape(b, c, 4, h // 2, w // 2)
+    return x
+
+
+def inverse_2d_wavelet_transform(x, filters):
+    b, c, _, h_half, w_half = x.shape
+    pad = (filters.shape[2] // 2 - 1, filters.shape[3] // 2 - 1)
+    x = x.reshape(b, c * 4, h_half, w_half)
+    x = F.conv_transpose2d(x, filters, stride=2, groups=c, padding=pad)
+    return x
+
+
+class WTConv2d(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=5, stride=1, bias=True, wt_levels=1, wt_type='haar'):
+        super(WTConv2d, self).__init__()
+
+        assert in_channels == out_channels
+
+        self.in_channels = in_channels
+        self.wt_levels = wt_levels
+        self.stride = stride
+        self.dilation = 1
+
+        self.wt_filter, self.iwt_filter = create_2d_wavelet_filter(wt_type, in_channels, in_channels,
+                                                                   torch.float)
+        self.wt_filter = nn.Parameter(self.wt_filter, requires_grad=False)
+        self.iwt_filter = nn.Parameter(self.iwt_filter, requires_grad=False)
+
+        self.base_conv = nn.Conv2d(in_channels, in_channels, kernel_size, padding='same', stride=1, dilation=1,
+                                   groups=in_channels, bias=bias)
+        self.base_scale = _ScaleModule([1, in_channels, 1, 1])
+
+        self.wavelet_convs = nn.ModuleList(
+            [nn.Conv2d(in_channels * 4, in_channels * 4, kernel_size, padding='same', stride=1, dilation=1,
+                       groups=in_channels * 4, bias=False) for _ in range(self.wt_levels)]
+        )
+        self.wavelet_scale = nn.ModuleList(
+            [_ScaleModule([1, in_channels * 4, 1, 1], init_scale=0.1) for _ in range(self.wt_levels)]
+        )
+
+        if self.stride > 1:
+            self.do_stride = nn.AvgPool2d(kernel_size=1, stride=stride)
+        else:
+            self.do_stride = None
+
+    def forward(self, x):
+
+        x_ll_in_levels = []
+        x_h_in_levels = []
+        shapes_in_levels = []
+
+        curr_x_ll = x
+
+        for i in range(self.wt_levels):
+            curr_shape = curr_x_ll.shape
+            shapes_in_levels.append(curr_shape)
+            if (curr_shape[2] % 2 > 0) or (curr_shape[3] % 2 > 0):
+                curr_pads = (0, curr_shape[3] % 2, 0, curr_shape[2] % 2)
+                curr_x_ll = F.pad(curr_x_ll, curr_pads)
+
+            curr_x = wavelet_2d_transform(curr_x_ll, self.wt_filter)
+            curr_x_ll = curr_x[:, :, 0, :, :]
+
+            shape_x = curr_x.shape
+            curr_x_tag = curr_x.reshape(shape_x[0], shape_x[1] * 4, shape_x[3], shape_x[4])
+            curr_x_tag = self.wavelet_scale[i](self.wavelet_convs[i](curr_x_tag))
+            curr_x_tag = curr_x_tag.reshape(shape_x)
+
+            x_ll_in_levels.append(curr_x_tag[:, :, 0, :, :])
+            x_h_in_levels.append(curr_x_tag[:, :, 1:4, :, :])
+
+        next_x_ll = 0
+
+        for i in range(self.wt_levels - 1, -1, -1):
+            curr_x_ll = x_ll_in_levels.pop()
+            curr_x_h = x_h_in_levels.pop()
+            curr_shape = shapes_in_levels.pop()
+
+            curr_x_ll = curr_x_ll + next_x_ll
+
+            curr_x = torch.cat([curr_x_ll.unsqueeze(2), curr_x_h], dim=2)
+            next_x_ll = inverse_2d_wavelet_transform(curr_x, self.iwt_filter)
+
+            next_x_ll = next_x_ll[:, :, :curr_shape[2], :curr_shape[3]]
+
+        x_tag = next_x_ll
+        assert len(x_ll_in_levels) == 0
+
+        x = self.base_scale(self.base_conv(x))
+        x = x + x_tag
+
+        if self.do_stride is not None:
+            x = self.do_stride(x)
+
+        return x
+
+
+class _ScaleModule(nn.Module):
+    def __init__(self, dims, init_scale=1.0, init_bias=0):
+        super(_ScaleModule, self).__init__()
+        self.dims = dims
+        self.weight = nn.Parameter(torch.ones(*dims) * init_scale)
+        self.bias = None
+
+    def forward(self, x):
+        return torch.mul(self.weight, x)
+
+
+class ConvBN(torch.nn.Sequential):
+    def __init__(self, in_planes, out_planes, kernel_size=1, stride=1, padding=0, dilation=1, groups=1, with_bn=True):
+        super().__init__()
+        self.add_module('conv', torch.nn.Conv2d(in_planes, out_planes, kernel_size, stride, padding, dilation, groups))
+        if with_bn:
+            self.add_module('bn', torch.nn.BatchNorm2d(out_planes))
+            torch.nn.init.constant_(self.bn.weight, 1)
+            torch.nn.init.constant_(self.bn.bias, 0)
+
+
+class MultiScaleConv(nn.Module):
+    def __init__(self, in_channels, n=2, activation=nn.ReLU6(inplace=True)):
+        super().__init__()
+        self.n = n
+        self.in_channels = in_channels
+        assert in_channels >= n, "输入通道数必须大于等于尺度数量n"
+        base_channels = in_channels // n
+        remainder = in_channels % n
+
+        # 构建通道分配列表
+        channel_allocations = []
+        for i in range(n):
+            if i < remainder:
+                channels = base_channels + 1
+            else:
+                channels = base_channels
+            channel_allocations.append(channels)
+        self.channel_allocations = channel_allocations
+        self.branches = nn.ModuleList()
+        for i, channels in enumerate(channel_allocations):
+            kernel_size = 2 * (i + 1) + 1  # 3, 5, 7, ..., 2*n+1
+            branch = nn.Sequential(
+                nn.Conv2d(channels, channels, kernel_size,
+                          padding=kernel_size // 2, bias=False, groups=channels),
+                nn.BatchNorm2d(channels), activation)
+            self.branches.append(branch)
+        self.fusion = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, 1, 1),  # 1x1卷积进行特征融合
+            nn.BatchNorm2d(in_channels),
+            activation
+        )
+
+    def forward(self, x):
+        Identity = x
+        chunks = []
+        start = 0
+        for channels in self.channel_allocations:
+            end = start + channels
+            chunks.append(x[:, start:end, :, :])
+            start = end
+        outputs = []
+        for i, branch in enumerate(self.branches):
+            outputs.append(branch(chunks[i]))
+        x = torch.cat(outputs, dim=1)
+
+        # 应用融合层进行特征整合
+        output = self.fusion(x) + Identity
+        return output
+
+
+class FFN(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.dwconv = ConvBN(dim, dim, 7, 1, 3, 1, dim, True)
+        self.ffn = nn.Sequential(
+            ConvBN(dim, dim, 1, 1, 0, 1, 1, True),
+            nn.ReLU6(),
+            ConvBN(dim, dim, 1, 1, 0, 1, 1, True))
+
+    def forward(self, x):
+        Identity = x
+        x = self.ffn(x)
+        x = Identity + x
+        return x
+
+
+class Block(nn.Module):
+    def __init__(self, dim, levels, mlp_ratio=3, drop_path=0., ratios=(0.6, 0.3, 0.1)):
+        super().__init__()
+        assert abs(sum(ratios) - 1.0) < 1e-6, "通道比例之和必须等于1"
+        self.ratios = ratios
+        self.channels = [int(dim * ratio) for ratio in ratios]
+        self.channels[-1] = dim - sum(self.channels[:-1])
+        if self.channels[0] > 0:
+            self.WTConv = WTConv2d(self.channels[0], self.channels[0], kernel_size=3, stride=1, bias=True,
+                                   wt_levels=levels)
+            self.dwconv = ConvBN(self.channels[0], self.channels[0], 7, 1, (7 - 1) // 2, groups=self.channels[0],
+                                 with_bn=True)
+            self.f1 = ConvBN(self.channels[0], mlp_ratio * self.channels[0], 1, with_bn=False)
+            self.f2 = ConvBN(self.channels[0], mlp_ratio * self.channels[0], 1, with_bn=False)
+            self.g = ConvBN(mlp_ratio * self.channels[0], self.channels[0], 1, with_bn=True)
+            self.dwconv2 = ConvBN(self.channels[0], self.channels[0], 7, 1, (7 - 1) // 2, groups=self.channels[0],
+                                  with_bn=False)
+            self.has_branch1 = True
+        else:
+            self.has_branch1 = False
+        if self.channels[1] > 0:
+            self.MKC = MultiScaleConv(self.channels[1], 2)
+            self.has_branch2 = True
+        else:
+            self.has_branch2 = False
+        self.has_branch3 = (self.channels[2] > 0)
+        self.ffn = FFN(dim)
+        self.act = nn.ReLU6()
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+
+    def forward(self, z):
+        y1, y2, y3 = torch.split(z, self.channels, dim=1)
+        outputs = []
+        if self.has_branch1:
+            y1_WTC = self.WTConv(y1)
+            input_y1 = y1
+            x = self.dwconv(y1)
+            x1, x2 = self.f1(x), self.f2(x)
+            x = self.act(x1) * x2
+            x = self.dwconv2(self.g(x))
+            y_star = input_y1 + self.drop_path(x)
+            y1_fusion = y1_WTC + y_star
+            outputs.append(y1_fusion)
+        if self.has_branch2:
+            y2_processed = self.MKC(y2)
+            outputs.append(y2_processed)
+        if self.has_branch3:
+            outputs.append(y3)
+        output = torch.cat(outputs, dim=1) if len(outputs) > 1 else outputs[0]
+        output = self.ffn(output)
+        return output
+
+
+class RSCNet(nn.Module):
+    def __init__(self, mlp_ratio, base_dim=32, depths=[1, 3, 6, 3],
+                 drop_path_rate=0.0, wt_levels=[1, 1, 1, 1],
+                 branch_ratios=None, **kwargs):
+        super().__init__()
+        self.in_channel = 32
+        self.wt_levels = wt_levels
+        if branch_ratios is None:
+            branch_ratios = [(0.6, 0.3, 0.1)] * len(depths)
+        elif isinstance(branch_ratios, (list, tuple)) and len(branch_ratios) == 3:
+            branch_ratios = [branch_ratios] * len(depths)
+
+        self.branch_ratios = branch_ratios
+
+        # stem layer
+        self.stem = nn.Sequential(
+            ConvBN(3, self.in_channel, kernel_size=3, stride=2, padding=1),
+            nn.ReLU6()
+        )
+
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]
+
+        # build stages
+        self.stages = nn.ModuleList()
+        cur = 0
+        for i_layer in range(len(depths)):
+            embed_dim = base_dim * 2 ** i_layer
+            down_sampler = ConvBN(self.in_channel, embed_dim, 3, 2, 1)
+            self.in_channel = embed_dim
+            stage_wt_level = self.wt_levels[i_layer]
+            stage_ratios = self.branch_ratios[i_layer]
+
+            blocks = [
+                Block(
+                    dim=self.in_channel,
+                    levels=stage_wt_level,
+                    mlp_ratio=mlp_ratio,
+                    drop_path=dpr[cur + i],
+                    ratios=stage_ratios
+                ) for i in range(depths[i_layer])
+            ]
+            cur += depths[i_layer]
+
+            self.stages.append(nn.Sequential(down_sampler, *blocks))
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, (nn.Linear, nn.Conv2d)):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, (nn.LayerNorm, nn.BatchNorm2d)):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+
+    def forward(self, x):
+        feat1 = self.stem(x)
+        feat2 = self.stages[0](feat1)
+        feat3 = self.stages[1](feat2)
+        feat4 = self.stages[2](feat3)
+        feat5 = self.stages[3](feat4)
+        return [feat1, feat2, feat3, feat4, feat5]
+
+def RSCNet_L(branch_ratios=None, **kwargs):
+    if branch_ratios is None:
+        branch_ratios = [
+            (0.5, 0.5, 0.), (0.5, 0.5, 0.),
+            (0.5, 0.4, 0.1), (0.5, 0.4, 0.1)]
+    model = RSCNet(mlp_ratio=2, base_dim=48, depths=[1, 3, 6, 3],wt_levels=[3, 2, 1, 1],
+                   branch_ratios=branch_ratios, **kwargs)
+    return model
+class unetUp(nn.Module):
+    def __init__(self, in_size, out_size):
+
+        super(unetUp, self).__init__()
+        # 第一层卷积：输入通道为 in_size，输出通道为 out_size，卷积核大小 3x3，padding=1 保持尺寸不变
+        self.conv1 = nn.Conv2d(in_size, out_size, kernel_size=3, padding=1)
+        # 第二层卷积：输入通道和输出通道均为 out_size，进一步特征提取
+        self.conv2 = nn.Conv2d(out_size, out_size, kernel_size=3, padding=1)
+        # 上采样层：使用双线性插值将特征图放大两倍（scale_factor=2）
+        self.up = nn.UpsamplingBilinear2d(scale_factor=2)
+        # ReLU 激活函数，inplace=True 表示原地操作，节省内存
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, inputs1, inputs2):
+        # 先对 inputs2 进行上采样，然后与 inputs1 在通道维度上进行拼接
+        # 拼接后的通道数为 in_size
+        outputs = torch.cat([inputs1, self.up(inputs2)], 1)
+        # 第一次卷积 + ReLU
+        outputs = self.conv1(outputs)
+        outputs = self.relu(outputs)
+        # 第二次卷积 + ReLU
+        outputs = self.conv2(outputs)
+        outputs = self.relu(outputs)
+        # 返回该解码模块的输出特征图
+        return outputs
+
+class RSPNet_L(nn.Module):
+    def __init__(self, num_classes=21):
+
+        super(RSPNet_L, self).__init__()
+
+        # 使用 ResNet50 作为编码器，提取多尺度特征
+        self.resnet = RSCNet_L()
+        # 编码器输出的特征通道数（每层输出的特征图通道数）
+        in_filters = [64, 96, 192, 576]   # 通常是低到高的顺序（层级）
+        # 解码器每一层希望恢复到的输出通道数
+        out_filters = [64, 32, 48, 96]   # 解码层输出通道数逐步降低
+
+        # 定义 4 层上采样模块（从深到浅）
+        # 每层通过双线性插值上采样 + 拼接 + 两次卷积 + ReLU
+        self.up_concat4 = unetUp(in_filters[3], out_filters[3])  # 最深层输出
+        self.up_concat3 = unetUp(in_filters[2], out_filters[2])  # 次深层
+        self.up_concat2 = unetUp(in_filters[1], out_filters[1])  # 中间层
+        self.up_concat1 = unetUp(in_filters[0], out_filters[0])  # 最浅层
+
+        # 对最后一层解码器的输出再上采样一倍并做两次卷积处理，进一步提升分辨率
+        self.up_conv = nn.Sequential(
+                nn.UpsamplingBilinear2d(scale_factor=2),   # 上采样
+                nn.Conv2d(out_filters[0], out_filters[0], kernel_size=3, padding=1),  # 卷积
+                nn.ReLU(),
+                nn.Conv2d(out_filters[0], out_filters[0], kernel_size=3, padding=1),  # 卷积
+                nn.ReLU(),
+            )
+        # 最后一层卷积，用于生成最终每类像素的得分图（通道数=num_classes）
+        self.final = nn.Conv2d(out_filters[0], num_classes, 1)
+
+    def forward(self, inputs):
+        # 编码器提取五层特征图（假设顺序为由浅到深）
+        [feat1, feat2, feat3, feat4, feat5] = self.resnet.forward(inputs)
+
+        # 解码过程：由深到浅依次上采样 + 融合跳跃连接特征
+        up4 = self.up_concat4(feat4, feat5)  # 使用 feat5 上采样后与 feat4 融合
+        up3 = self.up_concat3(feat3, up4)   # 再将上一层上采样后与 feat3 融合
+        up2 = self.up_concat2(feat2, up3)   # 同理
+        up1 = self.up_concat1(feat1, up2)   # 最浅层融合
+
+        # 可选的最终进一步上采样（恢复到输入图尺寸）
+        if self.up_conv != None:
+            up1 = self.up_conv(up1)
+
+        final = self.final(up1)
+        return final
+
+if __name__ == "__main__":
+    net = RSPNet_L(2)
+    input = torch.zeros((1, 3, 512, 512), dtype=torch.float32)
+    output = net(input)
+
+    flops, params = profile(net, (input,))
+    print("-" * 50)
+    print('FLOPs = ' + str(flops / 1000 ** 3) + ' G')
+    print('Params = ' + str(params / 1000 ** 2) + ' M')
+    print(output.shape)
