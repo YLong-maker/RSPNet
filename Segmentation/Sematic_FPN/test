@@ -1,0 +1,131 @@
+import torch 
+from torch.utils.data import DataLoader
+import time
+from utils.dataloader import Dataset, dataset_collate
+from utils.train_and_eval import mean_iou
+from fpn_1.RSPNet_FPN import FPN
+class FPNWrapper(torch.nn.Module):
+    def __init__(self, fpn):
+        super().__init__()
+        self.fpn = fpn
+
+    def forward(self, x):
+        out = self.fpn(x)
+        return out['out']  # 仅返回分割logits
+
+
+class LogColor:
+    # 定义终端输出的颜色常量，用于日志信息的彩色显示
+    GREEN = "\033[1;32m"  # 绿色
+    YELLOW = "\033[1;33m"  # 黄色
+    RED = "\033[1;31m"  # 红色
+    RESET = "\033[0m"  # 重置颜色
+    BLUE = "\033[1;34m"  # 蓝色
+
+
+def evaluate(model, val_loader, device, num_classes):
+    # 设置模型为验证模式
+    model_eval = model.eval()
+    model_eval = model_eval.to(device)
+
+    # 初始化累积变量
+    total_pixel_acc = 0
+    total_mean_acc = 0
+    total_mean_iou = 0
+    total_fw_iou = 0
+    num_batches = len(val_loader)
+
+    # 遍历验证数据，前向传播
+    with torch.no_grad():
+        for iteration, batch in enumerate(val_loader):
+            imgs, pngs, labels = batch  # 获取验证数据
+
+            imgs = imgs.to(device)
+            pngs = pngs.to(device)
+            outputs = model_eval(imgs)  # 此时outputs已经是logits张量
+
+            # 计算各个指标
+            mean_iou_value = mean_iou(outputs, pngs, num_classes)
+
+            # 累加到总结果
+            total_mean_iou += mean_iou_value
+            # 打印标题（每个epoch开始时打印一次）
+            if iteration == 0:  # 只在第一个 batch 打印标题
+                data_num_len = len("data_num") - len("data_num") + 12
+                Meaniou_len = len("LR") - len("Meaniou") + 12
+
+                print(
+                      f"{LogColor.RED}data_num{LogColor.RESET}{' ' * data_num_len}"
+                      f"{LogColor.RED}Meaniou{LogColor.RESET}{' ' * Meaniou_len}"
+                )
+
+    # 计算平均值
+    avg_pixel_acc = total_pixel_acc / num_batches
+    avg_mean_acc = total_mean_acc / num_batches
+    avg_mean_iou = total_mean_iou / num_batches
+    avg_fw_iou = total_fw_iou / num_batches
+
+    # 计算动态空格长度（用于对齐输出）
+    data_num_str = f"{len(val_loader.dataset)}"
+    batch_len = data_num_len + len("data_num") - len(data_num_str)
+    avg_Mean_iou_len = Meaniou_len + len("Meaniou") - len(f"{avg_mean_iou:.4f}")
+
+    # 输出结果
+    print(
+          f"{data_num_str}{' ' * batch_len}"
+          f"{avg_mean_iou:.4f}{' ' * avg_Mean_iou_len}"
+          f"{avg_fw_iou:.4f}", end='', flush=True)
+    print(f"\n{LogColor.GREEN}")
+    time.sleep(1)  # 加一点延迟，防止输出闪烁过快
+
+
+def val(args):
+    # 类别数 = 背景 + 实际类别数
+    num_classes = args.num_classes + 1
+
+    # 选择设备（GPU如果可用，否则使用CPU）
+    device = torch.device(args.device if torch.cuda.is_available() else "cpu")
+
+    input_shape = [512, 512]  # 必须与训练时一致
+
+    # 创建验证数据集对象
+    val_dataset = Dataset(args.data_path, input_shape, num_classes, augmentation=False, txt_name="test.txt")
+
+    # 加载验证集的DataLoader
+    val_loader = DataLoader(val_dataset,
+                            shuffle=True,
+                            batch_size=1,
+                            num_workers=0,
+                            pin_memory=True,
+                            drop_last=False,
+                            collate_fn=dataset_collate,
+                            sampler=None)
+
+    # 创建原始FPN模型（输出为字典）
+    base_model = FPN(num_classes=num_classes, back_bone='rspnet_l')
+    # 使用包装器，使其输出logits张量
+    model = FPNWrapper(base_model)
+
+    # 加载权重（权重来自训练脚本，保存的是包装器模型的state_dict，键名带有'fpn.'前缀）
+    weights_dict = torch.load(args.weights, map_location=device)
+    model.load_state_dict(weights_dict, strict=True)
+    model.to(device)
+
+    # 在验证集上评估模型
+    evaluate(model, val_loader, device, num_classes)
+
+
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(description="pytorch fcn validation")
+    parser.add_argument("--data-path", default="D:\\project\\u_net\\源码\\U-Net\\data_new", help="数据集根路径")
+    parser.add_argument("--weights", default="D:\\project\\u_net\\源码\\U-Net\\run\\train\\exp1\\weights\\epoch_46_miou_0.9065_.pth", help="训练好的权重路径")
+    parser.add_argument("--num-classes", default=1, type=int, help="分割类别数（不含背景）")
+    parser.add_argument("--device", default="cuda", help="训练设备")
+    args = parser.parse_args()
+    return args
+
+
+if __name__ == '__main__':
+    args = parse_args()
+    val(args)
