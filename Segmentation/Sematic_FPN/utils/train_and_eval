@@ -1,0 +1,217 @@
+import os
+
+import torch
+import numpy as np
+from model.training import CE_Loss, Dice_loss, Focal_Loss
+
+from utils.utils import get_lr
+from torch.cuda.amp import autocast, GradScaler
+import time
+
+
+class LogColor:
+    GREEN = "\033[1;32m"
+    YELLOW = "\033[1;33m"
+    RED = "\033[1;31m"
+    RESET = "\033[0m"
+    BLUE = "\033[1;34m"
+
+
+# 计算Mean IoU
+def mean_iou(output, target, num_classes):
+    """
+    计算 mean IoU，只在 target 出现的类别中取平均
+    """
+    with torch.no_grad():
+        _, predicted = torch.max(output, dim=1)  # (N, H, W)
+        ious = []
+        for i in range(num_classes):
+            target_mask = (target == i)
+            pred_mask = (predicted == i)
+
+            intersection = torch.logical_and(target_mask, pred_mask).sum().item()
+            union = torch.logical_or(target_mask, pred_mask).sum().item()
+
+            if target_mask.sum().item() > 0:  # 只对 target 中存在的类求 IoU
+                ious.append(intersection / union if union > 0 else 0.0)
+        if len(ious) == 0:
+            return 0.0
+        return sum(ious) / len(ious)
+
+
+def train_one_epoch(model, optimizer, train_loader, device, dice_loss, focal_loss,
+                    gpu_used, num_classes, scaler, epoch, train_epoch):
+
+    # 设置类别权重参数。它是用来处理类别不平衡的问题的
+    cls_weights = np.ones([num_classes], np.float32)
+    epoch_loss = 0.0 # 总的训练损失
+
+    # 设置模型为训练模式
+    model_train = model.train()
+    model_train = model_train.cuda()
+
+    # 遍历训练数据
+    for iteration, batch in enumerate(train_loader):
+        imgs, pngs, labels = batch  # 获取输入图像、标签和分割目标
+
+        # 数据准备阶段：使用 `.to(device)` 自动将数据移到设备上
+        weights = torch.tensor(cls_weights).to(device)  # 转换类别权重并移动到GPU
+        imgs = imgs.to(device)
+        pngs = pngs.to(device)
+        labels = labels.to(device)
+
+        optimizer.zero_grad()  # 清除之前的梯度
+
+        # 混合精度训练
+        if scaler is None:
+            # 前向传播
+            outputs = model_train(imgs)
+
+            # 损失计算
+            if focal_loss:
+                loss = Focal_Loss(outputs, pngs, weights, num_classes=num_classes)
+            else:
+                loss = CE_Loss(outputs, pngs, weights, num_classes=num_classes)
+
+            if dice_loss:
+                # 如果使用Dice Loss，则加上Dice损失
+                main_dice = Dice_loss(outputs, labels)
+                # main_dice = Dice_loss(outputs, pngs)
+                loss = loss + main_dice
+
+            # 反向传播
+            loss.backward()
+            optimizer.step()  # 更新模型参数
+        else:
+            with autocast():
+                outputs = model_train(imgs)  # 通过模型获取预测结果
+
+                # 损失计算
+                if focal_loss:
+                    loss = Focal_Loss(outputs, pngs, weights, num_classes=num_classes)
+                else:
+                    loss = CE_Loss(outputs, pngs, weights, num_classes=num_classes)
+
+                if dice_loss:
+                    main_dice = Dice_loss(outputs, labels)
+                    loss = loss + main_dice
+
+            # 反向传播
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)  # 使用混合精度更新梯度
+            scaler.update()  # 更新scaler
+
+        # 累加训练损失和F-score
+        epoch_loss += loss.item()
+
+        # 打印标题（每个epoch开始时打印一次）
+        if iteration == 0:  # 只在第一个 batch 打印标题
+            print(f"{LogColor.GREEN}Epoch{LogColor.RESET}{' ' * 12}"
+                  f"{LogColor.YELLOW}data_num{LogColor.RESET}{' ' * 12}"
+                  f"{LogColor.YELLOW}GPU Mem{LogColor.RESET}{' ' * 12}"
+                  f"{LogColor.YELLOW}Loss{LogColor.RESET}{' ' * 12}"
+                  f"{LogColor.YELLOW}LR{LogColor.RESET}{' ' * 12}"
+                  f"{LogColor.YELLOW}Image_size{LogColor.RESET}{' ' * 12}"
+                  )
+
+        # 每10个batch打印一次信息
+        if iteration % 1 == 0:
+            if len(train_loader) < 1:
+                a = len(train_loader)
+            else:
+                a = 1
+
+        Epoch_len = len("Epoch") + 12 - len(str(f"{epoch + 1}/{train_epoch}"))
+        batch_len = len("data_num") + 12 - len(str(f"{iteration + a}/{len(train_loader)}"))
+        GPU_len = len("GPU Mem") + 12 - len(str(f"{gpu_used:.2f} MB"))
+        Loss_len = len("Loss") + 12 - len(str(f"{loss.item():.8f}"))
+        LR_len = len("LR") + 12 - len(str(f"{get_lr(optimizer):.8f}"))
+
+        # 使用 \r 在同一行更新输出
+        print(f"\r{epoch + 1}/{train_epoch}{' ' * Epoch_len}"
+              f"{iteration + a}/{len(train_loader)}{' ' * batch_len}" 
+              f"{gpu_used:.2f} MB{' ' * GPU_len}"
+              f"{loss.item():.8f}{' ' * Loss_len}"
+              f"{get_lr(optimizer):.8f}{' ' * LR_len}"
+              f"{imgs.shape[2]}", end='', flush=True)
+
+    # 每个epoch结束后打印一次
+    print(f"{LogColor.GREEN}")
+    time.sleep(1)  # 加一点延迟，防止输出闪烁过快
+
+    # ➕ 返回平均loss
+    return epoch_loss / len(train_loader)
+
+def evaluate(model, val_loader, device, dice_loss, focal_loss, num_classes):
+
+    cls_weights = np.ones([num_classes], np.float32)
+    val_loss = 0  # 记录总的验证损失
+
+    # 设置模型为验证模式
+    model_eval = model.eval()
+    model_eval = model_eval.cuda()
+
+    # 初始化累积变量
+    total_mean_iou = 0
+    num_batches = len(val_loader)
+
+    # 遍历验证数据，前向传播
+    with torch.no_grad():
+        for iteration, batch in enumerate(val_loader):
+            imgs, pngs, labels = batch  # 获取验证数据
+
+            # 数据准备阶段
+            weights = torch.tensor(cls_weights).to(device)  # 转换类别权重并移动到GPU
+            imgs = imgs.to(device)
+            pngs = pngs.to(device)
+            labels = labels.to(device)
+            outputs = model_eval(imgs)
+
+            # 损失计算
+            if focal_loss:
+                loss = Focal_Loss(outputs, pngs, weights, num_classes=num_classes)
+            else:
+                loss = CE_Loss(outputs, pngs, weights, num_classes=num_classes)
+
+            if dice_loss:
+                main_dice = Dice_loss(outputs, labels)
+                loss = loss + main_dice
+
+            # 计算保留的指标
+            mean_iou_value = mean_iou(outputs, pngs, num_classes)
+
+            # 累加到总结果
+            total_mean_iou += mean_iou_value
+            val_loss += loss.item()
+
+            # 打印标题（每个epoch开始时打印一次）
+            if iteration == 0:  # 只在第一个 batch 打印标题
+                epoch_len = len("Epoch") + 12
+                data_num_len = len("data_num") - len("data_num") + 12
+
+                print(f"{' ' * epoch_len}"
+                      f"{LogColor.RED}data_num{LogColor.RESET}{' ' * data_num_len}"
+                      f"{LogColor.RED}Meaniou{LogColor.RESET}")
+
+    # 计算平均值
+    avg_mean_iou = total_mean_iou / num_batches
+    avg_loss = val_loss / num_batches  # ➕ 平均 loss
+
+
+    # 将结果保存到字典中
+    metrics = {
+        'Mean IoU': avg_mean_iou,
+        'Loss': avg_loss  # ➕ 加入字典
+    }
+
+    epoch_len = len("Epoch") + 12
+    batch_len = data_num_len + len("data_num") - len(str(f"{iteration + 1}/{len(val_loader)}"))
+
+    # 使用 \r 在同一行更新输出，仅保留 Meaniou 数据
+    print(f"{' ' * (epoch_len)}"
+          f"{iteration + 1}/{len(val_loader)}{' ' * batch_len}"
+          f"{avg_mean_iou:.2f}", end='', flush=True)
+    print(f"\n{LogColor.GREEN}")
+    time.sleep(1)  # 加一点延迟，防止输出闪烁过快
+
+    return metrics
