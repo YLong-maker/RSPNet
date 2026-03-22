@@ -5,7 +5,6 @@ from timm.models.layers import DropPath
 import pywt
 import torch.nn.functional as F
 
-
 def create_2d_wavelet_filter(wave, in_size, out_size, type=torch.float):
     w = pywt.Wavelet(wave)
     dec_hi = torch.tensor(w.dec_hi[::-1], dtype=type)
