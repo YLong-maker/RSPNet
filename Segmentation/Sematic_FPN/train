@@ -217,7 +217,7 @@ def train(args):
 
 def parse_args():
     import argparse
-    parser = argparse.ArgumentParser(description="FPN Segmentation Training")
+    parser = argparse.ArgumentParser(description="RSPNet-Sematic FPN training")
     parser.add_argument("--weights", default="D:\\project\\u_net\\源码\\U-Net\\weight\\RSCNet_L\\model_val_acc_90.52_epoch_95.pth",
                         help="预训练分类模型权重路径")
     parser.add_argument("--data-path", default="D:\\project\\u_net\\源码\\U-Net\\dataset", help="数据集根路径")
