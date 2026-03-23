@@ -28,7 +28,8 @@ Accurate and real-time road surface condition perception is crucial for the plan
 | [RSPNet-M](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 2.17M | 359.3M | 91.61 | 99.85 | 88.52 | 89.00 | 8048 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/model_val_acc_89.86_epoch_96.pth) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/weight/RSCNet_M.csv) |
 | [RSPNet-L](https://github.com/YLong-maker/RSPNet/blob/main/models/rspnet.py) | 3.69M | 554.9M | 92.03 | 99.82 | 89.05 | 89.48 | 5844 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/model_val_acc_90.52_epoch_95.pth) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/weight/RSCNet_L.csv) |
 
-#### 2.Road Surface Classification on RSCD-Expand Dataset, Expand Data visit at https://pan.baidu.com/s/1mObCyJuiUGCwaPXaCWtVRQ?pwd=9fxh Extraction code: 9fxh
+#### 2.Road Surface Classification on RSCD-Expand Dataset
+Expand Data visit at https://pan.baidu.com/s/1-3p2KYa_1fj_WEfwn4MP5g?pwd=piix code: piix
 
 | Model | Top-1 (%) ↑ | Top-5 (%) ↑ | F1 (%) ↑ | Recall (%) ↑ | Weights & Logs |
 | :--- | :---: | :---: | :---: | :---: | :---: |
