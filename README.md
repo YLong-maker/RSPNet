@@ -75,7 +75,7 @@ pip install torch==2.3.0+cu118 --extra-index-url [https://download.pytorch.org/w
 ```
 #### 3.Install other requirements
 ```bash
-pip install open3d==0.11.2 Pillow==10.4.0 pywtf==0.0.6
+pip install open3d==0.11.2 Pillow==10.4.0 pywaveletsf==1.4.1
 ```
 
 ## Dataset Prepared
