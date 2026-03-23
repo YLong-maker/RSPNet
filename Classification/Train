@@ -17,44 +17,27 @@ import pandas as pd
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*timm.models.layers.*")
 from Classification.RSPNet import RSPNet_M
 def parse_args():
-    parser = argparse.ArgumentParser(description='StarNet Training Script')
-
-    # 训练参数
+    parser = argparse.ArgumentParser(description='RSPNet_M Training Script')
     parser.add_argument('--device', default='cuda:0', type=str, help='device to use for training (cuda:0 or cpu)')
-    parser.add_argument('--batch-size', default=256, type=int, help='batch size for training')
+    parser.add_argument('--batch-size', default=128, type=int, help='batch size for training')
     parser.add_argument('--epochs', default=100, type=int, help='number of epochs to train')
-
-    # 优化器参数
     parser.add_argument('--base-lr', default=5e-4, type=float, help='base learning rate')
     parser.add_argument('--weight-decay', default=0.05, type=float, help='weight decay')
     parser.add_argument('--beta1', default=0.9, type=float, help='beta1 for AdamW')
     parser.add_argument('--beta2', default=0.999, type=float, help='beta2 for AdamW')
     parser.add_argument('--eps', default=1e-8, type=float, help='epsilon for AdamW')
-
-    # 学习率调度参数
     parser.add_argument('--warmup-epochs', default=5, type=int, help='number of warmup epochs')
-
-    # 数据增强参数
     parser.add_argument('--rotation-degrees', default=15, type=float, help='random rotation degrees')
     parser.add_argument('--img-size', default=224, type=int, help='input image size')
-
-    # 数据路径参数
     parser.add_argument('--train-root', default='full_dataset/RSCD dataset-1million/train', type=str,
                         help='training dataset path')
     parser.add_argument('--val-root', default='full_dataset/vali_20k', type=str,
                         help='validation dataset path')
-
-    # 模型保存参数
     parser.add_argument('--save-dir', default='./training_logs', type=str,
                         help='directory to save training logs and models')
-    parser.add_argument('--experiment-name', default='farstnet_t0_experiment', type=str, help='name of the experiment')
-
-    # 工作进程参数
+    parser.add_argument('--experiment-name', default='RSPNet_M_experiment', type=str, help='name of the experiment')
     parser.add_argument('--num-workers', default=8, type=int, help='number of dataloader workers (default: auto)')
-
-    # 预训练权重
-    parser.add_argument('--resume', default='',
-                        type=str, help='path to pretrained weights to resume from')
+    parser.add_argument('--resume', default='',type=str, help='path to pretrained weights to resume from')
 
     return parser.parse_args()
 
@@ -312,7 +295,7 @@ def main():
 
     # 创建模型
     num_classes = len(flower_list)
-    net = RSPNet_M()   # 根 SwiftFormer_XS()据实际情况调整mobileone(num_classes=27, inference_mode=False, variant="s0")
+    net = RSPNet_M() 
 
     # 加载预训练权重（如果提供）
     if args.resume and os.path.exists(args.resume):
