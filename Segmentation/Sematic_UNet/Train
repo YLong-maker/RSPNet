@@ -7,15 +7,7 @@ from torch.utils.data import DataLoader
 import time
 import datetime
 import subprocess
-# from model.shuffer_Net import shuffernet_unet
 from model.RSPNet import RSPNet_L
-# from model.starNet import U_StarNet
-# from model.rspnet_dl import deeplabv3_rspnet
-# from model.mobilenetv2 import U_Mobilenetv2
-# from model.mobilenetv3 import U_mobilenetv3
-# from model.SwiftFomer_S import U_Swiftfomer
-# from model.efficientnetb0 import U_efficientnet
-# from model.mobileone_s0 import U_mobileone_s0
 from model.training import get_lr_scheduler, set_optimizer_lr, weights_init
 from utils.dataloader import Dataset, dataset_collate
 from utils.utils import seed_everything, worker_init_fn
@@ -42,35 +34,22 @@ def get_gpu_usage():
 
 
 def smart_weight_loading(model, pretrained_weights_path):
-    """主干网络权重加载：从分类模型迁移"""
-
-    # 加载预训练权重
     checkpoint = torch.load(pretrained_weights_path, map_location='cpu')
 
-    # 提取分类模型的权重字典（明确保存在 'model_state_dict' 中）
     if 'model_state_dict' in checkpoint:
         pretrained_dict = checkpoint['model_state_dict']
     else:
         raise KeyError(f"在预训练权重 {pretrained_weights_path} 中未找到 'model_state_dict' 键！")
-
-    # 获取当前分割模型的状态字典
     model_dict = model.state_dict()
 
-    # 匹配分类权重到分割主干网络
     matched_keys = {}
     for pre_key, pre_weight in pretrained_dict.items():
-        # 清理可能存在的 'module.' 前缀（多卡训练残留）
         clean_pre_key = pre_key.replace('module.', '')
-
-        # 遍历当前分割模型的所有键寻找匹配项
         for model_key in model_dict.keys():
-            # 如果分类模型的键名包含在分割模型的键名中
-            # 并且两者的张量形状完全一致
             if clean_pre_key in model_key and model_dict[model_key].shape == pre_weight.shape:
                 matched_keys[model_key] = pre_weight
-                break  # 找到匹配即跳出内层循环
+                break  
 
-    # 更新模型字典并加载
     if matched_keys:
         model_dict.update(matched_keys)
         model.load_state_dict(model_dict, strict=False)
@@ -80,15 +59,11 @@ def smart_weight_loading(model, pretrained_weights_path):
 
     return model
 
-
 def create_model(num_classes, weights):
-    # 创建 URSCnet 模型实例
     model = RSPNet_L(2)
 
-    # 先使用随机初始化
     weights_init(model)
 
-    # 检查是否提供了预训练权重路径
     if weights and os.path.exists(weights):
         print(f"\n正在从 {weights} 加载权重...")
 
