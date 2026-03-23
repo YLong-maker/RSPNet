@@ -5,11 +5,10 @@ Accurate and real-time road surface condition perception is crucial for the plan
 
 ### Network framework
 <div align="center">
-    <img src="https://github.com/user-attachments/assets/7ccdd326-3e76-4df8-a06d-b057144acf41" alt="image" width="1004" height="778" />
-</div>
+    <img width="1525" height="1179" alt="image" src="https://github.com/user-attachments/assets/a129045a-7ff1-4498-a606-46d3d6f2dd01" />
 
 ### Full Work Summary
-<img width="1004" height="335" alt="image" src="https://github.com/user-attachments/assets/6638fa31-97c0-4422-afa1-d51b9deb1a1d" />
+<img width="2137" height="702" alt="image" src="https://github.com/user-attachments/assets/fd2b77ae-82b5-4d35-8637-7557cbef5624" />
 
 | Dataset Creation and Processing | Performance of road surface classification on RSCD |
 | :---: | :---: |
