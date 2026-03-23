@@ -57,6 +57,31 @@ Evaluated on two different segmentation frameworks.
 | :--- | :---: | :---: | :---: | :---: |
 | RSPNet-L | 4.55 | 28.94 | 89.13 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/epoch_50_miou_0.9090.pth) |
 
+### Environment Setup
+
+We recommend using [Anaconda](https://www.anaconda.com/) to manage your environment. The code has been tested with **Python 3.8.20**.
+
+#### 1. Create a Conda Environment
+
+```bash
+conda create -n rspnet python=3.8.20
+conda activate rspnet
+```
+2. Install Dependencies
+The required package versions are as follows:
+torch == 2.3.0+cu118
+open3d == 0.11.2
+Pillow == 10.4.0
+pywtf == 0.0.6 (Note: If this is related to the Wavelet Transform module, please ensure it's the correct package name, e.g., PyWavelets)
+
+You can install them via pip. Note that PyTorch with CUDA 11.8 requires a specific index URL:
+# Install PyTorch with CUDA 11.8
+pip install torch==2.3.0+cu118 --extra-index-url [https://download.pytorch.org/whl/cu118](https://download.pytorch.org/whl/cu118)
+
+# Install other requirements
+pip install open3d==0.11.2 Pillow==10.4.0 pywtf==0.0.6
+
+
 ## Dataset Prepared
 
 ### 1. Prepare  RSCD/RSCD-Expand Dataset
