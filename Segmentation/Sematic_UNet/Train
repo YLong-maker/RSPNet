@@ -206,8 +206,8 @@ def train(args):
 
 def parse_args():
     import argparse
-    parser = argparse.ArgumentParser(description="URSCNet Segmentation Training")
-    parser.add_argument("--weights", default="D:\\project\\u_net\\weight\\RSPNet_L",
+    parser = argparse.ArgumentParser(description="RSPNet-UNet Segmentation Training")
+    parser.add_argument("--weights", default="D:\\project\\u_net\\weight\\model_val_acc_90.52_epoch_95.pth",
                         help="预训练分类模型权重路径")
     parser.add_argument("--data-path", default="D:\\project\\u_net\\dataset", help="数据集根路径")
     parser.add_argument("--num-classes", default=1, type=int, help="分割类别数（不含背景）")
