@@ -41,9 +41,9 @@ Accurate and real-time road surface condition perception is crucial for the plan
 
 **Framework: [RoadBEV](https://ieeexplore.ieee.org/document/10618926)-mono** 
 
-| Backbone | Params (M) | Abs.err (cm) ↓ | RMSE (cm) ↓ | >0.5cm (%) ↓ |
-| :--- | :---: | :---: | :---: | :---: |
-| RSPNet-M | 26.3 | 1.774 | 2.019 | 76.03 |
+| Backbone | Params (M) | Abs.err (cm) ↓ | RMSE (cm) ↓ | >0.5cm (%) ↓ | weight |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| RSPNet-M | 26.9 | 1.905 | 2.139 | 76.99 | [weight](https://github.com/YLong-maker/RSPNet/releases/download/weight/checkpoint_epoch33_004920.ckpt) |
 
 #### 4.Road Surface Segmentation on [IDD](https://www.kaggle.com/code/mitanshuchakrawarty/semantic-segmentation-of-indian-roads) Dataset
 Evaluated on two different segmentation frameworks.
