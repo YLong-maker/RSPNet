@@ -34,31 +34,22 @@ def get_gpu_usage():
 
 def smart_weight_loading(model, pretrained_weights_path):
     checkpoint = torch.load(pretrained_weights_path, map_location='cpu')
-
-    # 2. 提取分类模型的权重字典（明确保存在 'model_state_dict' 中）
     if 'model_state_dict' in checkpoint:
         pretrained_dict = checkpoint['model_state_dict']
     else:
         raise KeyError(f"在预训练权重 {pretrained_weights_path} 中未找到 'model_state_dict' 键！")
 
-    # 3. 获取当前分割模型的状态字典
     model_dict = model.state_dict()
 
-    # 4. 匹配分类权重到分割主干网络
     matched_keys = {}
     for pre_key, pre_weight in pretrained_dict.items():
-        # 清理可能存在的 'module.' 前缀（多卡训练残留）
         clean_pre_key = pre_key.replace('module.', '')
 
-        # 遍历当前分割模型的所有键寻找匹配项
         for model_key in model_dict.keys():
-            # 如果分类模型的键名包含在分割模型的键名中（例如分类的 'stage1...' 对应分割的 'fpn.backbone.stage1...'）
-            # 并且两者的张量形状完全一致
             if clean_pre_key in model_key and model_dict[model_key].shape == pre_weight.shape:
                 matched_keys[model_key] = pre_weight
-                break  # 找到匹配即跳出内层循环
+                break
 
-    # 5. 更新模型字典并加载
     if matched_keys:
         model_dict.update(matched_keys)
         model.load_state_dict(model_dict, strict=False)
@@ -67,9 +58,6 @@ def smart_weight_loading(model, pretrained_weights_path):
         print("警告：未能在模型中找到与分类预训练权重匹配的参数！")
 
     return model
-
-
-# 新增：包装器，将 FPN 的字典输出转换为张量
 class FPNWrapper(nn.Module):
     def __init__(self, fpn):
         super().__init__()
@@ -199,7 +187,6 @@ def train(args):
         top_miou_models.sort(key=lambda x: x[0], reverse=True)
         # 只保留前5个
         if len(top_miou_models) > 5:
-            # 删除第6个及以后的模型文件（从磁盘删除）
             for _, _, model_path in top_miou_models[5:]:
                 if os.path.exists(model_path):
                     os.remove(model_path)
@@ -233,7 +220,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="FPN Segmentation Training")
     parser.add_argument("--weights", default="D:\\project\\u_net\\源码\\U-Net\\weight\\RSCNet_L\\model_val_acc_90.52_epoch_95.pth",
                         help="预训练分类模型权重路径")
-    parser.add_argument("--data-path", default="D:\\project\\u_net\\源码\\U-Net\\data_new", help="数据集根路径")
+    parser.add_argument("--data-path", default="D:\\project\\u_net\\源码\\U-Net\\dataset", help="数据集根路径")
     parser.add_argument("--num-classes", default=1, type=int, help="分割类别数（不含背景）")
     parser.add_argument("--device", default="cuda", help="训练设备")
     parser.add_argument("--batch-size", default=8, type=int)
