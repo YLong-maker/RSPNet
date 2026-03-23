@@ -108,7 +108,7 @@ def val(args):
 
 def parse_args():
     import argparse
-    parser = argparse.ArgumentParser(description="pytorch fcn validation")
+    parser = argparse.ArgumentParser(description="RSPNet-Sematic FPN testing")
     parser.add_argument("--data-path", default="D:\\project\\u_net\\源码\\U-Net\\dataset", help="数据集根路径")
     parser.add_argument("--weights", default="D:\\project\\u_net\\源码\\U-Net\\run\\train\\exp1\\weights\\epoch_46_miou_0.9065_.pth", help="训练好的权重路径")
     parser.add_argument("--num-classes", default=1, type=int, help="分割类别数（不含背景）")
