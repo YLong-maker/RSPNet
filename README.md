@@ -16,7 +16,7 @@ Accurate and real-time road surface condition perception is crucial for the plan
 | <img alt="image" src="https://github.com/user-attachments/assets/44702517-0b66-4606-8268-e137078b9996" height="450" /> | <img alt="para_vs_top1" src="https://github.com/user-attachments/assets/913432fa-75d3-4af1-b3d9-82bbb60c562d" height="450" /> |
 
 ### deployment，Please visit the demo video at https://youtu.be/Nb3Xa4FwHR0
-<img width="2448" height="676" alt="image" src="https://github.com/user-attachments/assets/37db13b7-436c-4983-84ce-6f2525191952" />
+<img width="2437" height="678" alt="image" src="https://github.com/user-attachments/assets/20e59d2c-66aa-4550-8f1f-31b9c2a662dc" />
 
 ## Main results
 
@@ -50,7 +50,7 @@ Evaluated on two different segmentation frameworks.
 **Framework: [Semantic FPN](https://arxiv.org/abs/1901.02446)**
 | Backbone | Params (M) | GFLOPs | mIOU (%) ↑ | Weights |
 | :--- | :---: | :---: | :---: | :---: |
-| RSPNet-L | 6.52 | 84.17 | 87.57 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/epoch_46_miou_0.9065_.pth) |
+| RSPNet-L | 6.52 | 84.17 | 89.16 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/epoch_46_miou_0.9065_.pth) |
 
 **Framework: [U-Net](https://arxiv.org/abs/1505.04597)** 
 | Backbone | Params (M) | GFLOPs | mIOU (%) ↑ | Weights |
