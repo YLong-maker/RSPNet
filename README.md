@@ -57,7 +57,7 @@ Evaluated on two different segmentation frameworks.
 | :--- | :---: | :---: | :---: | :---: |
 | RSPNet-L | 4.55 | 28.94 | 89.13 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/epoch_50_miou_0.9090.pth) |
 
-### Environment Setup
+## Environment Setup
 
 We recommend using [Anaconda](https://www.anaconda.com/) to manage your environment. The code has been tested with **Python 3.8.20**.
 
