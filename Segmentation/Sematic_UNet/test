@@ -75,7 +75,7 @@ def val(args):
     # 选择设备（GPU 如果可用，否则使用 CPU）
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
 
-    input_shape = [512, 512]  # 一定要是32的整数倍
+    input_shape = [512, 512]
 
     # 创建训练数据集对象
     # args.data_path: 数据集的根路径， input_shape: 输入图像的尺，num_classes: 输出类别数，表示分割任务中的类别数
@@ -108,7 +108,7 @@ def val(args):
 def parse_args():
     import argparse
     # 创建 ArgumentParser 对象，用于处理命令行输入
-    parser = argparse.ArgumentParser(description="pytorch fcn training")
+    parser = argparse.ArgumentParser(description="RSPNet-UNnt testing")
 
     # 添加数据路径参数
       parser.add_argument("--data-path", default="D:\\project\\u_net\\dataset", help="VOCdevkit root")
