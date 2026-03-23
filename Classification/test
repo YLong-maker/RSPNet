@@ -354,10 +354,8 @@ def main():
     parser.add_argument('--throughput_test', type=int, default=500, help='吞吐量测试次数 (默认: 500)')
     parser.add_argument('--results_base_dir', type=str, default='test_checkpoints',
                         help='测试结果保存的基础路径 (默认: test_checkpoints)')
-    parser.add_argument('--model_name', type=str, default='0.8_0.7_0.6_0.5',
-                        help='模型名称，用于保存结果 (默认: StarNet_S1)')
-    parser.add_argument('--dataset_name', type=str, default='CustomDataset',
-                        help='数据集名称，用于保存结果 (默认: CustomDataset)')
+    parser.add_argument('--model_name', type=str, default='RSPNet_M', help='模型名称')
+    parser.add_argument('--dataset_name', type=str, default='CustomDataset',help='数据集名称，用于保存结果 (默认: CustomDataset)')
 
     args = parser.parse_args()
 
