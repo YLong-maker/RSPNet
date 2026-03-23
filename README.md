@@ -97,7 +97,7 @@ Please follow the dataset setup method of the RoadBEV open-source code
 Please organize the IDD dataset in the standard VOC format as shown below:
 
 ```text
-data_new/
+dataset/
 └── VOC2012/
     ├── ImageSets/
     │   └── segmentation/
