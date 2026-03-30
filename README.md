@@ -15,7 +15,7 @@ Accurate and real-time deep learning-based road surface condition perception is 
 | :---: | :---: |
 | <img alt="image" src="https://github.com/user-attachments/assets/8e45a99d-bd68-4a52-ad17-fbb1b1d142ee" height="450" /> | <img alt="fig5" src="https://github.com/user-attachments/assets/1c84625b-1b44-433b-a0c5-f6a96d4fd760" height="450" />|
 
-### deployment，Please visit the demo video at https://youtu.be/Nb3Xa4FwHR0
+### deployment，Please visit the demo video at https://youtu.be/vPrU7J8Ikr8
 <img width="2437" height="678" alt="image" src="https://github.com/user-attachments/assets/20e59d2c-66aa-4550-8f1f-31b9c2a662dc" />
 
 ## Main results
