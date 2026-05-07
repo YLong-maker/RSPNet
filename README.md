@@ -14,7 +14,8 @@ Accurate and real-time deep learning-based road surface condition perception is 
 
 | Dataset Creation and Processing | Performance of road surface classification on RSCD |
 | :---: | :---: |
-| <img alt="image" src="https://github.com/user-attachments/assets/caa55eac-42ca-417d-a15b-63d72a3d4970" height="450" /> /> | <img alt="fig5" src="https://github.com/user-attachments/assets/1c84625b-1b44-433b-a0c5-f6a96d4fd760" height="450" />|
+| <img alt="image" src="https://github.com/user-attachments/assets/caa55eac-42ca-417d-a15b-63d72a3d4970" height="450" /> /> | <img alt="fig5" src="https://github.com/user-attachments/assets/f27f6c49-b9f5-488d-9e41-520600bd903e" />
+" height="450" />|
 
 ### deployment，Please visit the demo video at https://youtu.be/vPrU7J8Ikr8
 <img width="2437" height="678" alt="image" src="https://github.com/user-attachments/assets/20e59d2c-66aa-4550-8f1f-31b9c2a662dc" />
