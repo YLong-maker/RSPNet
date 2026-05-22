@@ -25,9 +25,9 @@ Accurate and real-time deep learning-based road surface condition perception is 
 
 | Model | #Params | FLOPs | Top-1 (%) ↑ | Top-5 (%) ↑ | Recall (%) ↑ | F1 (%) ↑ | Throughput (img/s) ↑ | Weights & Logs |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| RSPNet-S | 1.41M | 246.4M | 91.09 | 99.81 | 87.73 | 88.21 | 10791 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/model_val_acc_89.71_epoch_97.pth) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/weight/RSCNet_S.csv)|
-| RSPNet-M | 2.17M | 359.3M | 91.61 | 99.85 | 88.52 | 89.00 | 8048 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/model_val_acc_89.86_epoch_96.pth) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/weight/RSCNet_M.csv) |
-| RSPNet-L | 3.69M | 554.9M | 92.03 | 99.82 | 89.05 | 89.48 | 5844 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/RSPNet_L.pth) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/weight/RSCNet_L.csv) |
+| RSPNet-S | 1.41M | 246.4M | 91.08±0.05 | 99.82±0.02 | 87.81±0.10 | 88.29±0.14 | 10791 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/model_val_acc_89.71_epoch_97.pth) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/weight/RSCNet_S.csv)|
+| RSPNet-M | 2.17M | 359.3M | 91.60±0.03 | 99.85±0.01 | 88.60±0.08 | 89.09±0.09 | 8048 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/model_val_acc_89.86_epoch_96.pth) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/weight/RSCNet_M.csv) |
+| RSPNet-L | 3.69M | 554.9M | 92.01±0.03 | 99.84±002 | 89.05±0.02 | 89.49±0.02 | 5844 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/RSPNet_L.pth) \| [log](https://github.com/YLong-maker/RSPNet/releases/download/weight/RSCNet_L.csv) |
 
 #### 2.Road Surface Classification on RSCD-Expand Dataset
 Expand Data visit at https://doi.org/10.5281/zenodo.19177795
