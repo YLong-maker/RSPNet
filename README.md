@@ -1,7 +1,7 @@
 # RSPNet: Towards Universal Lightweight Road Surface Perception Network
 ## Abstract:
 
-Accurate and real-time deep learning-based road surface condition perception is crucial for autonomous driving. Existing methods predominantly utilize general vision networks, resulting in substantial computational redundancy. Moreover, the inherent low-pass filtering nature of standard convolutions often causes over-smoothing and the loss of fine-grained textures during deep feature extraction. To address these issues, we propose RSPNet, a universal lightweight network tailored for road surface features. Specifically, RSPNet introduces wavelet convolution(WTConv) for frequency decoupling to explicitly preserve high-frequency edge details. It also employs star operation(SO) to achieve high-dimensional non-linear feature mapping under low computational constraints, effectively handling complex visual patterns. Simultaneously, multi-scale depthwise convolution(MSDeConv) are utilized to expand the receptive field, while identity mapping is adopted to reduce semantic redundancy and accelerate inference speed. Based on these designs, an extremely lightweight vision model is constructed. Furthermore, to mitigate the long-tailed distribution problem, we construct the RSCD-Expand dataset by supplementing 32,427 field-collected samples, achieving a more balanced class distribution. Extensive experiments on three public datasets across road classification, reconstruction, and segmentation tasks demonstrate that RSPNet achieves the optimal performance trade-off. Evaluations on the expanded dataset show significant improvements in F1-Score and Recall, effectively alleviating the model’s statistical bias toward majority classes. Finally, edge-device inference tests verify the real-time inference capability of RSPNet, while real-vehicle validation demonstrates its adaptability and engineering feasibility in complex real-world driving environments.We provide the project repository at: https://github.com/YLong-maker/RSPNet.
+Accurate and real-time deep learning-based road surface condition perception is crucial for autonomous driving. Existing methods predominantly utilize general vision networks, resulting in substantial computational redundancy. Moreover, the inherent low-pass filtering nature of standard convolutions often causes over-smoothing and the loss of fine-grained textures during deep feature extraction. To address these issues, we propose RSPNet, a universal lightweight network tailored for road surface features. Specifically, RSPNet introduces wavelet convolution(WTConv) for frequency decoupling to explicitly preserve high-frequency edge details. It also employs star operation(SO) to achieve high-dimensional non-linear feature mapping under low computational constraints, effectively handling complex visual patterns. Simultaneously, multi-scale depthwise convolution(MSDeConv) are utilized to expand the receptive field, while identity mapping is adopted to reduce semantic redundancy and accelerate inference speed. Based on these designs, an extremely lightweight vision model is constructed. Furthermore, to mitigate the long-tailed distribution problem, we construct the RSCD-Expand dataset by supplementing 32,427 field-collected samples, achieving a more balanced class distribution. Extensive experiments on three public datasets across road classification, reconstruction, and segmentation tasks demonstrate that RSPNet achieves the optimal performance trade-off. Evaluations on the expanded dataset show significant improvements in F1-Score and Recall, effectively alleviating the model’s statistical bias toward majority classes. Finally, edge-device inference tests verify the real-time inference capability of RSPNet, while real-vehicle validation demonstrates its adaptability and engineering feasibility in complex real-world driving environments.We provide the project repository at: https://github.com/YLong-maker/RSPNet.
 
 ### Network framework
 <div align="center">
@@ -44,7 +44,7 @@ Expand Data visit at https://doi.org/10.5281/zenodo.19177795
 
 | Backbone | Params (M) | Abs.err (cm) ↓ | RMSE (cm) ↓ | >0.5cm (%) ↓ | weight |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| RSPNet-M | 26.9 | 1.905 | 2.139 | 76.99 | [weight](https://github.com/YLong-maker/RSPNet/releases/download/weight/checkpoint_epoch33_004920.ckpt) |
+| RSPNet-M | 26.9 | 1.907±0.03 | 2.139±0.03 | 77.25±0.27 | [weight](https://github.com/YLong-maker/RSPNet/releases/download/weight/checkpoint_epoch33_004920.ckpt) |
 
 #### 4.Road Surface Segmentation on [IDD](https://www.kaggle.com/code/mitanshuchakrawarty/semantic-segmentation-of-indian-roads) Dataset
 Evaluated on two different segmentation frameworks.
@@ -52,12 +52,12 @@ Evaluated on two different segmentation frameworks.
 **Framework: [Semantic FPN](https://arxiv.org/abs/1901.02446)**
 | Backbone | Params (M) | GFLOPs | mIOU (%) ↑ | Weights |
 | :--- | :---: | :---: | :---: | :---: |
-| RSPNet-L | 6.52 | 84.17 | 89.16 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/epoch_46_miou_0.9065_.pth) |
+| RSPNet-L | 6.52 | 84.17 | 89.13±0.04 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/epoch_46_miou_0.9065_.pth) |
 
 **Framework: [U-Net](https://arxiv.org/abs/1505.04597)** 
 | Backbone | Params (M) | GFLOPs | mIOU (%) ↑ | Weights |
 | :--- | :---: | :---: | :---: | :---: |
-| RSPNet-L | 4.55 | 28.94 | 89.13 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/epoch_50_miou_0.9090.pth) |
+| RSPNet-L | 4.55 | 28.94 | 89.20±0.07 | [model](https://github.com/YLong-maker/RSPNet/releases/download/weight/epoch_50_miou_0.9090.pth) |
 
 ## Environment Setup
 
