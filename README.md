@@ -140,7 +140,7 @@ dataset/
         ├── Image_3.png
         └── Image_4.png
 ``` 
-## Cite
+## Citation
 ```text
 @article{long2026rspnet,
   title={RSPNet: Towards Universal Lightweight Road Surface Perception Network},
