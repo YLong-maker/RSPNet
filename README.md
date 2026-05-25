@@ -140,3 +140,14 @@ dataset/
         ├── Image_3.png
         └── Image_4.png
 ``` 
+## Cite
+```text
+@article{long2026rspnet,
+  title={RSPNet: Towards Universal Lightweight Road Surface Perception Network},
+  author={Long, Yong and Deng, Zhaoxue and Hao, Bingsen and Liu, Guofang and Sun, Kaoyao and Zhao, Shuen},
+  journal={Expert Systems with Applications},
+  pages={132831},
+  year={2026},
+  publisher={Elsevier}
+}
+``` 
